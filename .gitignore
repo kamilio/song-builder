@@ -5,3 +5,5 @@ dist/
 .claude/
 .poe-code-ralph/
 .agents/poe-code-ralph/
+test-results/
+playwright-report/
