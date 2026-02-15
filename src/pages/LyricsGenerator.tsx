@@ -30,6 +30,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiKeyMissingModal } from "@/components/ApiKeyMissingModal";
+import { LyricsItemCard } from "@/components/LyricsItemCard";
 import { useApiKeyGuard } from "@/hooks/useApiKeyGuard";
 import {
   createMessage,
@@ -517,19 +518,25 @@ export default function LyricsGenerator() {
           No messages yet. Ask Claude to write or refine your lyrics.
         </p>
       ) : (
-        ancestorPath.map((msg) => (
-          <div
-            key={msg.id}
-            className={`rounded-md px-3 py-2 text-sm max-w-[85%] ${
-              msg.role === "user"
-                ? "ml-auto bg-primary text-primary-foreground"
-                : "bg-muted"
-            }`}
-            data-testid={`chat-message-${msg.role}`}
-          >
-            {msg.content}
-          </div>
-        ))
+        ancestorPath.map((msg) =>
+          msg.role === "user" ? (
+            <div
+              key={msg.id}
+              className="rounded-md px-3 py-2 text-sm max-w-[85%] ml-auto bg-primary text-primary-foreground"
+              data-testid="chat-message-user"
+            >
+              {msg.content}
+            </div>
+          ) : (
+            <div
+              key={msg.id}
+              className="max-w-[92%]"
+              data-testid="chat-message-assistant"
+            >
+              <LyricsItemCard message={msg} />
+            </div>
+          )
+        )
       )}
       {isLoading && (
         <div
