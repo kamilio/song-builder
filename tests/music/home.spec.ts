@@ -1,66 +1,51 @@
 /**
- * Tests for US-003: Home page redesign (single prompt, creates root message).
+ * Tests for US-009: Shared home at / with Music/Image tab switcher.
  *
  * Verifies that:
- * - The home page shows only a centered prompt input with the correct placeholder
- * - Submitting creates a root Message (parentId: null) in storage
- * - After submit the URL changes to /lyrics/:messageId
+ * - The root path / renders the SharedHome component with Music and Image tabs
+ * - Music tab links to /music, Image tab links to /image
+ * - Active tab highlighting reflects the current URL prefix
+ * - No top-bar or breadcrumbs are shown on the shared home
  */
 
 import { test, expect } from "@playwright/test";
 import { clearStorage } from "./helpers/seed";
 
-test.describe("Home page — single prompt (US-003)", () => {
+test.describe("Shared home page — tab switcher (US-009)", () => {
   test.beforeEach(async ({ page }) => {
     await clearStorage(page);
     await page.goto("/");
   });
 
-  test("shows a prompt textarea with correct placeholder", async ({ page }) => {
-    const textarea = page.getByPlaceholder("What song do you want to make?");
-    await expect(textarea).toBeVisible();
+  test("shows Music tab linking to /music", async ({ page }) => {
+    const musicTab = page.getByTestId("tab-music");
+    await expect(musicTab).toBeVisible();
+    await expect(musicTab).toHaveAttribute("href", "/music");
   });
 
-  test("shows a submit button", async ({ page }) => {
-    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+  test("shows Image tab linking to /image", async ({ page }) => {
+    const imageTab = page.getByTestId("tab-image");
+    await expect(imageTab).toBeVisible();
+    await expect(imageTab).toHaveAttribute("href", "/image");
   });
 
-  test("does not show breadcrumbs or top bar on home", async ({ page }) => {
+  test("Music tab is active (aria-current=page) when at /", async ({ page }) => {
+    const musicTab = page.getByTestId("tab-music");
+    await expect(musicTab).toHaveAttribute("aria-current", "page");
+  });
+
+  test("Image tab is not active when at /", async ({ page }) => {
+    const imageTab = page.getByTestId("tab-image");
+    await expect(imageTab).not.toHaveAttribute("aria-current", "page");
+  });
+
+  test("does not show breadcrumbs or top bar on shared home", async ({ page }) => {
     await expect(page.getByTestId("top-bar")).not.toBeVisible();
+    await expect(page.getByLabel("Breadcrumb")).not.toBeVisible();
   });
 
-  test("submit creates a root Message and navigates to /lyrics/:messageId", async ({
-    page,
-  }) => {
-    const textarea = page.getByPlaceholder("What song do you want to make?");
-    await textarea.fill("A funky anthem about coffee");
-
-    await page.getByRole("button", { name: "Start" }).click();
-
-    // URL should have navigated to /lyrics/:messageId
-    await expect(page).toHaveURL(/\/music\/lyrics\/[^/]+$/);
-
-    // Extract messageId from URL
-    const url = page.url();
-    const messageId = url.split("/music/lyrics/")[1];
-
-    // Verify the message exists in storage with parentId: null
-    const message = await page.evaluate((id: string) => {
-      return window.storageService.getMessage(id);
-    }, messageId);
-
-    expect(message).not.toBeNull();
-    expect(message!.parentId).toBeNull();
-    expect(message!.role).toBe("user");
-    expect(message!.content).toBe("A funky anthem about coffee");
-  });
-
-  test("submit button is disabled when input is empty", async ({ page }) => {
-    await expect(page.getByRole("button", { name: "Start" })).toBeDisabled();
-  });
-
-  test("submit button is enabled after typing", async ({ page }) => {
-    await page.getByPlaceholder("What song do you want to make?").fill("hello");
-    await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
+  test("clicking Music tab navigates to /music", async ({ page }) => {
+    await page.getByTestId("tab-music").click();
+    await expect(page).toHaveURL("/music");
   });
 });

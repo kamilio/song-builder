@@ -1,10 +1,11 @@
 import { ReactNode, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Music, List, Pin, Settings as SettingsIcon, Bug } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Breadcrumb } from "@/music/components/Breadcrumb";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
+import SharedHome from "@/shared/components/SharedHome";
 import Home from "@/music/pages/Home";
 import LyricsList from "@/music/pages/LyricsList";
 import LyricsGenerator from "@/music/pages/LyricsGenerator";
@@ -120,8 +121,8 @@ export default function App() {
     <BrowserRouter>
       <RouteLogger />
       <Routes>
-        {/* Root redirect */}
-        <Route path="/" element={<Navigate to="/music" replace />} />
+        {/* Root — shared landing with Music/Image tab switcher */}
+        <Route path="/" element={<SharedHome />} />
 
         {/* Music — Home has no top bar */}
         <Route path="/music" element={<Home />} />

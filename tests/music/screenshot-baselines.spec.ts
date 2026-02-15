@@ -58,7 +58,7 @@ async function gotoSeeded(
   await page.waitForLoadState("networkidle");
 }
 
-// ─── Home page ───────────────────────────────────────────────────────────────
+// ─── Home page (SharedHome tab switcher) ─────────────────────────────────────
 
 test(
   "@screenshot:home home page desktop baseline",
@@ -67,9 +67,8 @@ test(
     await gotoSeeded(page, "/", emptyFixture);
 
     // Verify key content is visible before capturing
-    await expect(
-      page.getByPlaceholder("What song do you want to make?")
-    ).toBeVisible();
+    await expect(page.getByTestId("tab-music")).toBeVisible();
+    await expect(page.getByTestId("tab-image")).toBeVisible();
 
     await expect(page).toHaveScreenshot("home-desktop.png", {
       fullPage: true,
@@ -84,9 +83,8 @@ test(
     await page.setViewportSize(MOBILE);
     await gotoSeeded(page, "/", emptyFixture);
 
-    await expect(
-      page.getByPlaceholder("What song do you want to make?")
-    ).toBeVisible();
+    await expect(page.getByTestId("tab-music")).toBeVisible();
+    await expect(page.getByTestId("tab-image")).toBeVisible();
 
     await expect(page).toHaveScreenshot("home-mobile.png", {
       fullPage: true,

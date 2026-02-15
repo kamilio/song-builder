@@ -67,28 +67,26 @@ test.describe("Mobile QA — all 20 flows at 375×812 (US-016)", () => {
     await page.setViewportSize(MOBILE);
   });
 
-  // ── Flow 1: Home page renders at mobile width ───────────────────────────────
+  // ── Flow 1: Shared home renders tab switcher at mobile width ────────────────
 
   test("QA-01: Home page renders correctly at mobile width", async ({ page }) => {
     await mobileGoto(page, "/", emptyFixture);
 
-    // Prompt textarea and submit button visible
-    await expect(
-      page.getByPlaceholder("What song do you want to make?")
-    ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+    // SharedHome tab switcher visible
+    await expect(page.getByTestId("tab-music")).toBeVisible();
+    await expect(page.getByTestId("tab-image")).toBeVisible();
 
-    // No breadcrumb on home
+    // No breadcrumb on shared home
     await expect(page.getByLabel("Breadcrumb")).not.toBeVisible();
 
     // No horizontal scroll
     await assertNoHorizontalScroll(page);
   });
 
-  // ── Flow 2: Home → submit → navigates to Lyrics Editor ────────────────────
+  // ── Flow 2: Music tab → Music home → submit → navigates to Lyrics Editor ──
 
   test("QA-02: Home prompt submit navigates to Lyrics Editor on mobile", async ({ page }) => {
-    await mobileGoto(page, "/", emptyFixture);
+    await mobileGoto(page, "/music", emptyFixture);
 
     await page.getByPlaceholder("What song do you want to make?").fill(
       "Write a pop song about summer"
