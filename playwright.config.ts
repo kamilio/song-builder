@@ -7,6 +7,9 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",
+  // Store visual regression baselines in screenshots/ so they can be committed
+  snapshotDir: "./screenshots",
+  snapshotPathTemplate: "{snapshotDir}/{arg}{ext}",
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",

@@ -13,6 +13,7 @@
     "screenshot:home": "playwright test --grep @screenshot:home",
     "screenshot:lyrics": "playwright test --grep @screenshot:lyrics",
     "screenshot:lyrics-list": "playwright test --grep @screenshot:lyrics-list",
+    "screenshot:checkpoint": "playwright test --grep @screenshot:checkpoint",
     "screenshot:songs": "playwright test --grep @screenshot:songs",
     "screenshot:pinned": "playwright test --grep @screenshot:pinned",
     "screenshot:settings": "playwright test --grep @screenshot:settings"
