@@ -1,5 +1,5 @@
 /**
- * SessionView page (US-014, US-015, US-016)
+ * SessionView page (US-014, US-015, US-016, US-017)
  *
  * Route: /image/sessions/:id
  *
@@ -25,6 +25,9 @@
  * US-016: Thumbnail panel (desktop right panel) and thumbnail strip (mobile)
  * show all images across all generation steps, grouped by stepId descending
  * (newest group first). Each thumbnail is a small fixed-size image.
+ *
+ * US-017: Each thumbnail is wrapped in an anchor tag that opens the image
+ * URL in a new browser tab (target="_blank"). No in-app detail route is used.
  */
 
 import { Link, Navigate, useParams } from "react-router-dom";
@@ -129,16 +132,26 @@ function groupItemsByStep(
 
 // ─── ThumbnailImage ────────────────────────────────────────────────────────
 
-/** A single thumbnail image rendered at a small fixed size. */
+/** A single thumbnail image rendered at a small fixed size.
+ *  Clicking opens the full image in a new browser tab (US-017).
+ */
 function ThumbnailImage({ item }: { item: ImageItem }) {
   return (
-    <img
-      src={item.url}
-      alt=""
-      className="block object-cover rounded"
-      style={{ width: 64, height: 64, flexShrink: 0 }}
-      data-testid="thumbnail-image"
-    />
+    <a
+      href={item.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="View full image"
+      data-testid="thumbnail-link"
+    >
+      <img
+        src={item.url}
+        alt=""
+        className="block object-cover rounded"
+        style={{ width: 64, height: 64, flexShrink: 0 }}
+        data-testid="thumbnail-image"
+      />
+    </a>
   );
 }
 
