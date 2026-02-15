@@ -36,7 +36,7 @@ import {
   pinSong,
 } from "@/music/lib/storage/storageService";
 import type { Message, Song } from "@/music/lib/storage/types";
-import { createLLMClient } from "@/music/lib/llm/factory";
+import { createLLMClient } from "@/shared/lib/llm/factory";
 import { log } from "@/music/lib/actionLog";
 
 /** Build the style prompt sent to ElevenLabs from a message's lyrics fields. */

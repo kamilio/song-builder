@@ -48,8 +48,8 @@ import {
   updateMessage,
 } from "@/music/lib/storage/storageService";
 import type { Message } from "@/music/lib/storage/types";
-import { createLLMClient } from "@/music/lib/llm/factory";
-import type { ChatMessage as LLMChatMessage } from "@/music/lib/llm/types";
+import { createLLMClient } from "@/shared/lib/llm/factory";
+import type { ChatMessage as LLMChatMessage } from "@/shared/lib/llm/types";
 import { log } from "@/music/lib/actionLog";
 
 const LYRICS_SYSTEM_PROMPT = `You are a professional songwriter and lyricist. \
