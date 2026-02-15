@@ -1,5 +1,5 @@
 /**
- * SongGenerator page (US-011).
+ * SongGenerator page (US-011 / US-012).
  *
  * Reads the `?entryId=` query parameter to determine which lyrics entry is
  * currently open. Triggers N parallel calls to llmClient.generateSong() where
@@ -13,6 +13,12 @@
  *
  * The API key guard (useApiKeyGuard) blocks generation when no key is set,
  * matching the behaviour of the Lyrics Generator chat panel (US-007).
+ *
+ * Per-song actions (US-012):
+ *   - Play: inline HTML5 audio player (always visible)
+ *   - Pin: sets song.pinned = true in localStorage
+ *   - Delete: sets song.deleted = true in localStorage; hides song from list
+ *   - Download: fetches the audio URL and triggers the browser's native save dialog
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -25,6 +31,8 @@ import {
   getSettings,
   getSongsByLyricsEntry,
   createSong,
+  deleteSong,
+  pinSong,
 } from "@/lib/storage/storageService";
 import type { LyricsEntry, Song } from "@/lib/storage/types";
 import { createLLMClient } from "@/lib/llm/factory";
@@ -77,6 +85,13 @@ export default function SongGenerator() {
 
   const [slots, setSlots] = useState<SongSlot[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Local overrides for pin/delete state applied during this session.
+  // Maps song id -> partial Song fields so we can reflect storage changes
+  // without forcing a full re-read after every action.
+  const [songOverrides, setSongOverrides] = useState<
+    Map<string, Partial<Song>>
+  >(new Map());
 
   // All songs to display: stored baseline + new songs added this session.
   const songs = useMemo(() => {
@@ -145,12 +160,71 @@ export default function SongGenerator() {
     setSlots([]);
   }, [entryId, entry, isGenerating, guardAction]);
 
+  /** Pin or unpin a song; reflects the change locally without a full re-read. */
+  const handlePin = useCallback((song: Song) => {
+    const newPinned = !song.pinned;
+    pinSong(song.id, newPinned);
+    setSongOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(song.id, { ...next.get(song.id), pinned: newPinned });
+      return next;
+    });
+  }, []);
+
+  /** Soft-delete a song; hides it from the list immediately. */
+  const handleDelete = useCallback((song: Song) => {
+    deleteSong(song.id);
+    setSongOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(song.id, { ...next.get(song.id), deleted: true });
+      return next;
+    });
+  }, []);
+
+  /**
+   * Download the song's audio file using the browser's native save dialog.
+   * Fetches the URL as a blob so the browser prompts for a save location even
+   * when the audio is served from a cross-origin CDN.
+   */
+  const handleDownload = useCallback(async (song: Song) => {
+    try {
+      const response = await fetch(song.audioUrl);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `${song.title}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // If fetch fails (e.g. CORS or network), fall back to a direct link.
+      const a = document.createElement("a");
+      a.href = song.audioUrl;
+      a.download = `${song.title}.mp3`;
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  }, []);
+
+  // Merge local overrides into the songs list and filter out deleted ones.
+  const resolvedSongs = useMemo(
+    () =>
+      songs
+        .map((s) => ({ ...s, ...songOverrides.get(s.id) }))
+        .filter((s) => !s.deleted),
+    [songs, songOverrides]
+  );
+
   // Songs being shown in active slots (not yet moved to the persisted list).
   const slotSongIds = new Set(
     slots.filter((s) => s.song !== null).map((s) => s.song!.id)
   );
   // Songs to show in the static list (excludes those currently in active slots).
-  const listedSongs = songs.filter((s) => !slotSongIds.has(s.id));
+  const listedSongs = resolvedSongs.filter((s) => !slotSongIds.has(s.id));
 
   return (
     <div className="p-8 max-w-3xl">
@@ -212,7 +286,12 @@ export default function SongGenerator() {
                   Error: {slot.error}
                 </p>
               ) : slot.song ? (
-                <SongItem song={slot.song} />
+                <SongItem
+                  song={slot.song}
+                  onPin={handlePin}
+                  onDelete={handleDelete}
+                  onDownload={handleDownload}
+                />
               ) : null}
             </div>
           ))}
@@ -228,7 +307,12 @@ export default function SongGenerator() {
               className="rounded-md border p-4"
               data-testid="song-item"
             >
-              <SongItem song={song} />
+              <SongItem
+                song={song}
+                onPin={handlePin}
+                onDelete={handleDelete}
+                onDownload={handleDownload}
+              />
             </div>
           ))}
         </div>
@@ -239,13 +323,54 @@ export default function SongGenerator() {
   );
 }
 
-/** Renders a single song with its title and an inline HTML5 audio player. */
-function SongItem({ song }: { song: Song }) {
+interface SongItemProps {
+  song: Song;
+  onPin: (song: Song) => void;
+  onDelete: (song: Song) => void;
+  onDownload: (song: Song) => void;
+}
+
+/**
+ * Renders a single song with its title, an inline HTML5 audio player, and
+ * action buttons for pin, delete, and download (US-012).
+ */
+function SongItem({ song, onPin, onDelete, onDownload }: SongItemProps) {
   return (
     <>
-      <p className="font-medium text-sm mb-2" data-testid="song-title">
-        {song.title}
-      </p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="font-medium text-sm" data-testid="song-title">
+          {song.title}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPin(song)}
+            data-testid="song-pin-btn"
+            aria-label={song.pinned ? "Unpin song" : "Pin song"}
+          >
+            {song.pinned ? "Unpin" : "Pin"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onDownload(song)}
+            data-testid="song-download-btn"
+            aria-label="Download song"
+          >
+            Download
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onDelete(song)}
+            data-testid="song-delete-btn"
+            aria-label="Delete song"
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
       <audio
         controls
         src={song.audioUrl}
