@@ -3,8 +3,10 @@ import type { LLMClient, ChatMessage } from "./types";
 import lyricsFixture1 from "./fixtures/lyrics-response.txt?raw";
 import lyricsFixture2 from "./fixtures/lyrics-response-2.txt?raw";
 import songFixtureRaw from "./fixtures/song-response.json?raw";
+import imageUrlsRaw from "./fixtures/image-urls.json?raw";
 
 const lyricsFixtures = [lyricsFixture1, lyricsFixture2];
+const imageUrlFixtures: string[] = JSON.parse(imageUrlsRaw) as string[];
 
 /**
  * Fixture-based LLM client used in tests and offline development.
@@ -21,6 +23,7 @@ export class MockLLMClient implements LLMClient {
   /** Simulated latency in milliseconds (default 200 ms). */
   private readonly delayMs: number;
   private chatCallCount = 0;
+  private imageCallCount = 0;
 
   constructor(delayMs = 200) {
     this.delayMs = delayMs;
@@ -43,9 +46,12 @@ export class MockLLMClient implements LLMClient {
     return parsed.audioUrl;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async generateImage(_prompt: string, _count = 3): Promise<string[]> {
+  async generateImage(_prompt: string, count = 3): Promise<string[]> {
     await this.delay();
-    return [];
+    const urls: string[] = [];
+    for (let i = 0; i < count; i++) {
+      urls.push(imageUrlFixtures[this.imageCallCount++ % imageUrlFixtures.length]);
+    }
+    return urls;
   }
 }
