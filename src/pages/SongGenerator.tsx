@@ -1,12 +1,12 @@
 /**
  * SongGenerator page (US-011 / US-012).
  *
- * Reads the `?entryId=` query parameter to determine which lyrics entry is
- * currently open. Triggers N parallel calls to llmClient.generateSong() where
- * N comes from settings.numSongs (default 3). Each call receives a style
- * prompt derived from the entry's frontmatter fields. Generated songs are
- * persisted to localStorage via storageService.createSong() and rendered as
- * list items with an inline HTML5 audio player.
+ * Reads the `?messageId=` query parameter to determine which assistant message
+ * (lyrics version) is currently open. Triggers N parallel calls to
+ * llmClient.generateSong() where N comes from settings.numSongs (default 3).
+ * Each call receives a style prompt derived from the message's lyrics fields.
+ * Generated songs are persisted to localStorage via storageService.createSong()
+ * and rendered as list items with an inline HTML5 audio player.
  *
  * A per-song loading indicator is shown while each request is in flight, so
  * the user sees N skeleton rows immediately after clicking "Generate Songs".
@@ -27,23 +27,23 @@ import { Button } from "@/components/ui/button";
 import { ApiKeyMissingModal } from "@/components/ApiKeyMissingModal";
 import { useApiKeyGuard } from "@/hooks/useApiKeyGuard";
 import {
-  getLyricsEntry,
+  getMessage,
   getSettings,
-  getSongsByLyricsEntry,
+  getSongsByMessage,
   createSong,
   deleteSong,
   pinSong,
 } from "@/lib/storage/storageService";
-import type { LyricsEntry, Song } from "@/lib/storage/types";
+import type { Message, Song } from "@/lib/storage/types";
 import { createLLMClient } from "@/lib/llm/factory";
 
-/** Build the style prompt sent to ElevenLabs from a lyrics entry's frontmatter. */
-function buildStylePrompt(entry: LyricsEntry): string {
+/** Build the style prompt sent to ElevenLabs from a message's lyrics fields. */
+function buildStylePrompt(message: Message): string {
   const parts: string[] = [];
-  if (entry.title) parts.push(`Title: ${entry.title}`);
-  if (entry.style) parts.push(`Style: ${entry.style}`);
-  if (entry.commentary) parts.push(`Commentary: ${entry.commentary}`);
-  if (entry.body) parts.push(`\nLyrics:\n${entry.body}`);
+  if (message.title) parts.push(`Title: ${message.title}`);
+  if (message.style) parts.push(`Style: ${message.style}`);
+  if (message.commentary) parts.push(`Commentary: ${message.commentary}`);
+  if (message.lyricsBody) parts.push(`\nLyrics:\n${message.lyricsBody}`);
   return parts.join("\n");
 }
 
@@ -61,23 +61,23 @@ interface SongSlot {
 
 export default function SongGenerator() {
   const [searchParams] = useSearchParams();
-  const entryId = searchParams.get("entryId");
+  const messageId = searchParams.get("messageId");
 
   const { isModalOpen, guardAction, closeModal } = useApiKeyGuard();
 
-  // Derive entry from storage on every render; re-derives when entryId changes.
-  const entry = useMemo(
-    () => (entryId ? getLyricsEntry(entryId) : null),
-    [entryId]
+  // Derive message from storage on every render; re-derives when messageId changes.
+  const message = useMemo(
+    () => (messageId ? getMessage(messageId) : null),
+    [messageId]
   );
 
-  // Persisted songs from storage (baseline for this entry).
+  // Persisted songs from storage (baseline for this message).
   const storedSongs = useMemo(
     () =>
-      entryId
-        ? getSongsByLyricsEntry(entryId).filter((s) => !s.deleted)
+      messageId
+        ? getSongsByMessage(messageId).filter((s) => !s.deleted)
         : [],
-    [entryId]
+    [messageId]
   );
 
   // Songs added during the current page session (before a reload).
@@ -101,14 +101,14 @@ export default function SongGenerator() {
   }, [storedSongs, newSongs]);
 
   const handleGenerate = useCallback(async () => {
-    // API key guard must run first so the modal appears even without an entry.
+    // API key guard must run first so the modal appears even without a message.
     if (!guardAction()) return;
     if (isGenerating) return;
-    if (!entryId || !entry) return;
+    if (!messageId || !message) return;
 
     const settings = getSettings();
     const n = settings?.numSongs ?? 3;
-    const prompt = buildStylePrompt(entry);
+    const prompt = buildStylePrompt(message);
 
     // Build N loading slots immediately so the UI shows placeholders.
     const initialSlots: SongSlot[] = Array.from({ length: n }, (_, i) => ({
@@ -128,8 +128,8 @@ export default function SongGenerator() {
         const audioUrl = await client.generateSong(prompt);
         const songNumber = i + 1;
         const song = createSong({
-          lyricsEntryId: entryId,
-          title: `${entry.title || "Song"} (Take ${songNumber})`,
+          messageId,
+          title: `${message.title || "Song"} (Take ${songNumber})`,
           audioUrl,
         });
 
@@ -158,7 +158,7 @@ export default function SongGenerator() {
     setIsGenerating(false);
     // Clear slots now that all have resolved; the persisted songs list shows the results.
     setSlots([]);
-  }, [entryId, entry, isGenerating, guardAction]);
+  }, [messageId, message, isGenerating, guardAction]);
 
   /** Pin or unpin a song; reflects the change locally without a full re-read. */
   const handlePin = useCallback((song: Song) => {
@@ -233,23 +233,23 @@ export default function SongGenerator() {
         Generate audio from your lyrics using ElevenLabs.
       </p>
 
-      {/* Entry info */}
-      {entry ? (
+      {/* Message info */}
+      {message ? (
         <div className="mt-4 rounded-md bg-muted p-4 text-sm font-mono" data-testid="song-entry-info">
           <p>
             <span className="text-muted-foreground">title:</span>{" "}
-            <span data-testid="song-entry-title">{entry.title}</span>
+            <span data-testid="song-entry-title">{message.title}</span>
           </p>
           <p>
             <span className="text-muted-foreground">style:</span>{" "}
-            <span data-testid="song-entry-style">{entry.style}</span>
+            <span data-testid="song-entry-style">{message.style}</span>
           </p>
         </div>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground" data-testid="no-entry-message">
-          {entryId
-            ? "Lyrics entry not found."
-            : "No lyrics entry selected. Open a lyrics entry and click \"Generate Songs\"."}
+          {messageId
+            ? "Lyrics message not found."
+            : "No lyrics message selected. Open a lyrics entry and click \"Generate Songs\"."}
         </p>
       )}
 

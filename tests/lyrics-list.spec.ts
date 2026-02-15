@@ -91,7 +91,7 @@ test.describe("Lyrics List page", () => {
     await page
       .getByRole("cell", { name: "Morning Pop", exact: true })
       .click();
-    await expect(page).toHaveURL(/\/lyrics\/fixture-multi-entry-1$/);
+    await expect(page).toHaveURL(/\/lyrics\/fixture-multi-entry-1a$/);
   });
 
   test("soft-delete removes entry from table", async ({ page }) => {
@@ -120,24 +120,20 @@ test.describe("Lyrics List page", () => {
     const stored = await page.evaluate(() => {
       return window.storageService.export();
     });
-    const deleted = stored.lyricsEntries.find(
-      (e: { id: string }) => e.id === "fixture-multi-entry-1"
+    const deleted = stored.messages.find(
+      (m: { id: string }) => m.id === "fixture-multi-entry-1a"
     );
     expect(deleted).toBeDefined();
     expect((deleted as { deleted: boolean }).deleted).toBe(true);
   });
 
-  test("New Lyrics button creates blank entry and navigates to generator", async ({
+  test("New Lyrics button navigates to /lyrics/new", async ({
     page,
   }) => {
     await page.getByRole("button", { name: "New Lyrics" }).click();
 
-    // Should navigate to a /lyrics/:id route (not /lyrics/new)
-    await expect(page).toHaveURL(/\/lyrics\/.+/);
-    // The new entry should exist in storage
-    const stored = await page.evaluate(() => window.storageService.export());
-    // multiEntryFixture has 3 entries; new one added = 4
-    expect(stored.lyricsEntries.length).toBeGreaterThanOrEqual(4);
+    // Should navigate to /lyrics/new
+    await expect(page).toHaveURL(/\/lyrics\/new$/);
   });
 
   test("empty state message shown when no lyrics entries", async ({ page }) => {
@@ -187,5 +183,5 @@ test("Lyrics List: single entry fixture - row click navigates correctly", async 
   await page
     .getByRole("cell", { name: "Coffee Dreams", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/lyrics\/fixture-entry-1$/);
+  await expect(page).toHaveURL(/\/lyrics\/fixture-msg-1a$/);
 });

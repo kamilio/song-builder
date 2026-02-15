@@ -6,16 +6,14 @@
  *   Right panel – scrollable chat message history + text input / send button
  *
  * A "Generate Songs" button at the bottom navigates to the Song Generator for
- * the current entry, passing the entry id as a `?entryId=` query parameter so
- * US-011 can pick it up.
+ * the current message, passing the message id as a `?messageId=` query parameter.
  *
- * For `/lyrics/new` the page has no entry yet; empty-state messages are shown.
- * For `/lyrics/:id` the entry is read from localStorage.
+ * For `/lyrics/new` the page has no message yet; empty-state messages are shown.
+ * For `/lyrics/:id` the message is read from localStorage.
  *
- * Chat submission (US-010): calls createLLMClient().chat() with the full
- * conversation history, parses the frontmatter from the response, persists
- * the updated chatHistory + lyrics fields to localStorage, then re-reads the
- * entry to trigger a re-render.
+ * Chat submission: calls createLLMClient().chat() with the full ancestor path
+ * as history, parses the frontmatter from the response, persists a new assistant
+ * Message to localStorage, then navigates to the new message.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,13 +23,14 @@ import { Button } from "@/components/ui/button";
 import { ApiKeyMissingModal } from "@/components/ApiKeyMissingModal";
 import { useApiKeyGuard } from "@/hooks/useApiKeyGuard";
 import {
-  createLyricsEntry,
-  getLyricsEntry,
+  createMessage,
+  getMessage,
+  getAncestors,
   getSettings,
-  updateLyricsEntry,
 } from "@/lib/storage/storageService";
-import type { ChatMessage, LyricsEntry } from "@/lib/storage/types";
+import type { Message } from "@/lib/storage/types";
 import { createLLMClient } from "@/lib/llm/factory";
+import type { ChatMessage as LLMChatMessage } from "@/lib/llm/types";
 
 const LYRICS_SYSTEM_PROMPT = `You are a professional songwriter and lyricist. \
 Help the user write and refine song lyrics.
@@ -68,13 +67,13 @@ function parseLyricsResponse(text: string): {
   title: string;
   style: string;
   commentary: string;
-  body: string;
+  lyricsBody: string;
 } | null {
   const match = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return null;
 
   const frontmatter = match[1];
-  const body = match[2].trim();
+  const lyricsBody = match[2].trim();
 
   function extractField(name: string): string {
     const re = new RegExp(`^${name}:\\s*"?([^"\\n]+)"?`, "m");
@@ -86,7 +85,7 @@ function parseLyricsResponse(text: string): {
     title: extractField("title"),
     style: extractField("style"),
     commentary: extractField("commentary"),
-    body,
+    lyricsBody,
   };
 }
 
@@ -95,104 +94,101 @@ export default function LyricsGenerator() {
   const navigate = useNavigate();
   const { isModalOpen, guardAction, closeModal } = useApiKeyGuard();
 
-  const [message, setMessage] = useState("");
+  const [userInput, setUserInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  // Refresh counter: incrementing it causes entry to be re-read from storage.
+  // Refresh counter: incrementing it causes message to be re-read from storage.
   const [refreshCount, setRefreshCount] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Read entry from storage; re-reads whenever id or refreshCount changes.
-  const [entry, setEntry] = useState<LyricsEntry | null>(
-    () => (id ? getLyricsEntry(id) : null)
+  // Current assistant message (the one whose lyrics are shown in the left panel).
+  const [currentMessage, setCurrentMessage] = useState<Message | null>(
+    () => (id ? getMessage(id) : null)
+  );
+
+  // Full ancestor path for chat display.
+  const [ancestorPath, setAncestorPath] = useState<Message[]>(
+    () => (id ? getAncestors(id) : [])
   );
 
   useEffect(() => {
-    setEntry(id ? getLyricsEntry(id) : null);
+    const msg = id ? getMessage(id) : null;
+    setCurrentMessage(msg);
+    setAncestorPath(id ? getAncestors(id) : []);
   }, [id, refreshCount]);
 
-  // Scroll chat to bottom when chat history grows.
-  const chatLength = entry?.chatHistory.length ?? 0;
+  // Scroll chat to bottom when ancestor path grows.
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatLength]);
+  }, [ancestorPath.length]);
+
+  // Find the latest assistant message in the path for the left panel.
+  const latestAssistant = [...ancestorPath].reverse().find(
+    (m) => m.role === "assistant"
+  ) ?? null;
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      const trimmed = message.trim();
+      const trimmed = userInput.trim();
       if (!trimmed || isLoading) return;
-      // Check API key first so modal shows even when there is no active entry.
       if (!guardAction()) return;
 
-      // On /lyrics/new there is no entry yet — create one on first send.
-      let entryId = id;
-      let currentEntry = entryId ? getLyricsEntry(entryId) : null;
-      if (!entryId || !currentEntry) {
-        currentEntry = createLyricsEntry({
-          title: "",
-          style: "",
-          commentary: "",
-          body: "",
-          chatHistory: [],
-        });
-        entryId = currentEntry.id;
-      }
-
-      const userMessage: ChatMessage = { role: "user", content: trimmed };
-      const updatedHistory: ChatMessage[] = [
-        ...currentEntry.chatHistory,
-        userMessage,
-      ];
-
-      // Persist the user message immediately so it shows before the response.
-      updateLyricsEntry(entryId, { chatHistory: updatedHistory });
-      setMessage("");
-      if (id) setRefreshCount((c) => c + 1);
       setIsLoading(true);
 
-      try {
-        const settings = getSettings();
-        const client = createLLMClient(settings?.poeApiKey ?? undefined);
-        const responseText = await client.chat([
-          { role: "system" as const, content: LYRICS_SYSTEM_PROMPT },
-          ...updatedHistory,
-        ]);
+      // Determine the parentId for the new user message.
+      // If there is a current message, the user message is a child of it.
+      // If this is /lyrics/new, start a new root message.
+      const parentId = id && currentMessage ? id : null;
 
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: responseText,
-        };
-        // Replace any previous assistant message so only the latest response is stored.
-        const finalHistory: ChatMessage[] = [
-          ...updatedHistory.filter((m) => m.role !== "assistant"),
-          assistantMessage,
+      // Create the user message first.
+      const userMsg = createMessage({
+        role: "user",
+        content: trimmed,
+        parentId,
+      });
+
+      setUserInput("");
+
+      try {
+        // Build LLM history from ancestors + new user message.
+        const history: LLMChatMessage[] = [
+          { role: "system" as const, content: LYRICS_SYSTEM_PROMPT },
+          ...ancestorPath.map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          })),
+          { role: "user" as const, content: trimmed },
         ];
 
-        // Parse frontmatter from the assistant response and update the entry.
+        const settings = getSettings();
+        const client = createLLMClient(settings?.poeApiKey ?? undefined);
+        const responseText = await client.chat(history);
+
         const parsed = parseLyricsResponse(responseText);
-        updateLyricsEntry(entryId, {
-          chatHistory: finalHistory,
+        const assistantMsg = createMessage({
+          role: "assistant",
+          content: responseText,
+          parentId: userMsg.id,
           ...(parsed ?? {}),
         });
+
+        // Navigate to the new assistant message.
+        navigate(`/lyrics/${assistantMsg.id}`, { replace: !id });
+      } catch {
+        // On error, still navigate to the user message so the state is saved.
+        navigate(`/lyrics/${userMsg.id}`, { replace: !id });
       } finally {
         setIsLoading(false);
-        if (id) {
-          setRefreshCount((c) => c + 1);
-        } else {
-          // Navigate to the newly created entry so the URL reflects it.
-          navigate(`/lyrics/${entryId}`, { replace: true });
-        }
+        if (id) setRefreshCount((c) => c + 1);
       }
     },
-    [message, id, isLoading, guardAction, navigate]
+    [userInput, id, currentMessage, ancestorPath, isLoading, guardAction, navigate]
   );
 
   function handleGenerateSongs() {
     if (!id) return;
-    navigate(`/songs?entryId=${id}`);
+    navigate(`/songs?messageId=${id}`);
   }
-
-  const chatHistory: ChatMessage[] = entry?.chatHistory ?? [];
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -210,7 +206,7 @@ export default function LyricsGenerator() {
           data-testid="lyrics-panel"
         >
           <h2 className="text-lg font-semibold mb-4">Lyrics</h2>
-          {entry ? (
+          {latestAssistant ? (
             <>
               {/* Frontmatter block */}
               <div
@@ -219,15 +215,15 @@ export default function LyricsGenerator() {
               >
                 <p>
                   <span className="text-muted-foreground">title:</span>{" "}
-                  <span data-testid="lyrics-title">{entry.title}</span>
+                  <span data-testid="lyrics-title">{latestAssistant.title}</span>
                 </p>
                 <p>
                   <span className="text-muted-foreground">style:</span>{" "}
-                  <span data-testid="lyrics-style">{entry.style}</span>
+                  <span data-testid="lyrics-style">{latestAssistant.style}</span>
                 </p>
                 <p>
                   <span className="text-muted-foreground">commentary:</span>{" "}
-                  <span data-testid="lyrics-commentary">{entry.commentary}</span>
+                  <span data-testid="lyrics-commentary">{latestAssistant.commentary}</span>
                 </p>
               </div>
               {/* Lyrics body */}
@@ -235,13 +231,13 @@ export default function LyricsGenerator() {
                 className="font-mono text-sm whitespace-pre-wrap flex-1"
                 data-testid="lyrics-body"
               >
-                {entry.body}
+                {latestAssistant.lyricsBody}
               </pre>
             </>
           ) : (
             <p className="text-muted-foreground text-sm" data-testid="lyrics-empty">
               {id
-                ? "Entry not found."
+                ? "Message not found."
                 : "Select or create a lyrics entry to get started."}
             </p>
           )}
@@ -261,14 +257,14 @@ export default function LyricsGenerator() {
             data-testid="chat-history"
             aria-live="polite"
           >
-            {chatHistory.length === 0 ? (
+            {ancestorPath.length === 0 ? (
               <p className="text-muted-foreground text-sm" data-testid="chat-empty">
                 No messages yet. Ask Claude to write or refine your lyrics.
               </p>
             ) : (
-              chatHistory.map((msg, i) => (
+              ancestorPath.map((msg) => (
                 <div
-                  key={i}
+                  key={msg.id}
                   className={`rounded-md px-3 py-2 text-sm max-w-[85%] ${
                     msg.role === "user"
                       ? "ml-auto bg-primary text-primary-foreground"
@@ -299,8 +295,8 @@ export default function LyricsGenerator() {
             data-testid="chat-form"
           >
             <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

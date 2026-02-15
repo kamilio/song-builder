@@ -1,12 +1,12 @@
 /**
- * Lyrics List page (US-008).
+ * Lyrics List page (US-008 / US-009).
  *
- * Displays all non-deleted lyrics entries in a searchable table.
+ * Displays all non-deleted assistant messages (lyrics versions) in a searchable table.
  * Users can:
  *  - Search by title or style (real-time filter)
- *  - Click a row to open the Lyrics Generator for that entry
- *  - Click "New Lyrics" to create a blank entry and navigate to the generator
- *  - Soft-delete an entry (sets deleted=true, hides from table)
+ *  - Click a row to open the Lyrics Generator for that message
+ *  - Click "New Lyrics" to navigate to /lyrics/new
+ *  - Soft-delete a message (sets deleted=true, hides from table)
  */
 
 import React from "react";
@@ -14,42 +14,35 @@ import { useNavigate } from "react-router-dom";
 import { Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  getLyricsEntries,
-  createLyricsEntry,
-  deleteLyricsEntry,
+  getMessages,
+  updateMessage,
 } from "@/lib/storage/storageService";
-import type { LyricsEntry } from "@/lib/storage/types";
+import type { Message } from "@/lib/storage/types";
 
 export default function LyricsList() {
   const navigate = useNavigate();
-  const [allEntries, setAllEntries] = React.useState<LyricsEntry[]>(
-    () => getLyricsEntries().filter((e) => !e.deleted)
+  // Only show non-deleted assistant messages (which carry lyrics fields).
+  const [allEntries, setAllEntries] = React.useState<Message[]>(
+    () => getMessages().filter((m) => m.role === "assistant" && !m.deleted)
   );
   const [search, setSearch] = React.useState("");
 
   function reloadEntries() {
-    setAllEntries(getLyricsEntries().filter((e) => !e.deleted));
+    setAllEntries(getMessages().filter((m) => m.role === "assistant" && !m.deleted));
   }
 
   const filtered = search.trim()
-    ? allEntries.filter((e) => {
+    ? allEntries.filter((m) => {
         const q = search.toLowerCase();
         return (
-          e.title.toLowerCase().includes(q) ||
-          e.style.toLowerCase().includes(q)
+          (m.title ?? "").toLowerCase().includes(q) ||
+          (m.style ?? "").toLowerCase().includes(q)
         );
       })
     : allEntries;
 
   function handleNewLyrics() {
-    const entry = createLyricsEntry({
-      title: "",
-      style: "",
-      commentary: "",
-      body: "",
-      chatHistory: [],
-    });
-    navigate(`/lyrics/${entry.id}`);
+    navigate("/lyrics/new");
   }
 
   function handleRowClick(id: string) {
@@ -59,7 +52,7 @@ export default function LyricsList() {
   function handleDelete(e: React.MouseEvent, id: string) {
     // Prevent the row click from firing
     e.stopPropagation();
-    deleteLyricsEntry(id);
+    updateMessage(id, { deleted: true });
     reloadEntries();
   }
 
@@ -126,7 +119,7 @@ export default function LyricsList() {
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={(e) => handleDelete(e, entry.id)}
-                      aria-label={`Delete ${entry.title || "entry"}`}
+                      aria-label={`Delete ${entry.title ?? "entry"}`}
                       className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
                     >
                       <Trash2 className="h-4 w-4" />

@@ -94,7 +94,7 @@ test.describe("Settings: export / import", () => {
     const afterClear = await page.evaluate(() =>
       window.storageService.export()
     );
-    expect(afterClear.lyricsEntries).toHaveLength(0);
+    expect(afterClear.messages).toHaveLength(0);
     expect(afterClear.songs).toHaveLength(0);
 
     // Use the file input to import the saved export
@@ -106,7 +106,7 @@ test.describe("Settings: export / import", () => {
 
     // Verify all data is restored
     const restored = await page.evaluate(() => window.storageService.export());
-    expect(restored.lyricsEntries).toHaveLength(baseFixture.lyricsEntries.length);
+    expect(restored.messages).toHaveLength(baseFixture.messages.length);
     expect(restored.songs).toHaveLength(baseFixture.songs.length);
     expect(restored.settings?.poeApiKey).toBe("test-poe-api-key");
     expect(restored.settings?.numSongs).toBe(3);

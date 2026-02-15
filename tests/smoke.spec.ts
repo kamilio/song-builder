@@ -12,6 +12,6 @@ test("home page loads with empty state seeded via storageService.import", async 
   // Verify the import actually ran by confirming storage is empty
   const exported = await page.evaluate(() => window.storageService.export());
   expect(exported.settings).toBeNull();
-  expect(exported.lyricsEntries).toHaveLength(0);
+  expect(exported.messages).toHaveLength(0);
   expect(exported.songs).toHaveLength(0);
 });

@@ -1,8 +1,8 @@
 /**
  * PinnedSongs page (US-013).
  *
- * Displays all pinned, non-deleted songs across every lyrics entry.
- * Each song shows its title and the associated lyrics entry title.
+ * Displays all pinned, non-deleted songs across every message.
+ * Each song shows its title and the associated message title (lyrics title).
  *
  * Per-song actions:
  *   - Play: inline HTML5 audio player (always visible)
@@ -12,22 +12,22 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { getSongs, getLyricsEntries, pinSong } from "@/lib/storage/storageService";
+import { getSongs, getMessages, pinSong } from "@/lib/storage/storageService";
 import type { Song } from "@/lib/storage/types";
 
 export default function PinnedSongs() {
-  // Load all songs and entries once on mount; unpinning updates local state.
+  // Load all songs and messages once on mount; unpinning updates local state.
   const allSongs = useMemo(() => getSongs(), []);
-  const allEntries = useMemo(() => getLyricsEntries(), []);
+  const allMessages = useMemo(() => getMessages(), []);
 
-  // Map from lyricsEntryId → entry title for display.
-  const entryTitleMap = useMemo(() => {
+  // Map from messageId → message title for display.
+  const messageTitleMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const entry of allEntries) {
-      map.set(entry.id, entry.title);
+    for (const msg of allMessages) {
+      if (msg.title) map.set(msg.id, msg.title);
     }
     return map;
-  }, [allEntries]);
+  }, [allMessages]);
 
   // Local unpin tracking: set of song IDs that have been unpinned this session.
   const [unpinnedIds, setUnpinnedIds] = useState<Set<string>>(new Set());
@@ -96,7 +96,7 @@ export default function PinnedSongs() {
             <PinnedSongItem
               key={song.id}
               song={song}
-              entryTitle={entryTitleMap.get(song.lyricsEntryId) ?? ""}
+              entryTitle={messageTitleMap.get(song.messageId) ?? ""}
               onUnpin={handleUnpin}
               onDownload={handleDownload}
             />

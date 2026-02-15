@@ -24,7 +24,7 @@ test.describe("Per-song actions (US-012)", () => {
     page,
   }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     // All 3 songs should have audio players
     await expect(page.getByTestId("song-audio")).toHaveCount(3);
@@ -39,7 +39,7 @@ test.describe("Per-song actions (US-012)", () => {
 
   test("play: audio player has controls attribute", async ({ page }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     const audio = page.getByTestId("song-audio").first();
     await expect(audio).toHaveAttribute("controls");
@@ -47,7 +47,7 @@ test.describe("Per-song actions (US-012)", () => {
 
   test("pin: sets pinned flag to true in localStorage", async ({ page }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     // All songs in songGeneratorFixture start as pinned: false
     const firstPinBtn = page.getByTestId("song-pin-btn").first();
@@ -80,7 +80,7 @@ test.describe("Per-song actions (US-012)", () => {
       ),
     };
     await seedFixture(page, withPinnedSong);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     // First song should show "Unpin"
     const firstPinBtn = page.getByTestId("song-pin-btn").first();
@@ -106,7 +106,7 @@ test.describe("Per-song actions (US-012)", () => {
     page,
   }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     // 3 songs visible initially
     await expect(page.getByTestId("song-item")).toHaveCount(3);
@@ -132,7 +132,7 @@ test.describe("Per-song actions (US-012)", () => {
     page,
   }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     await page.getByTestId("song-delete-btn").first().click();
 
@@ -152,7 +152,7 @@ test.describe("Per-song actions (US-012)", () => {
 
   test("delete: multiple songs can be deleted", async ({ page }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     await expect(page.getByTestId("song-item")).toHaveCount(3);
 
@@ -169,14 +169,14 @@ test.describe("Per-song actions (US-012)", () => {
     page,
   }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     await expect(page.getByTestId("song-download-btn")).toHaveCount(3);
   });
 
   test("action buttons are visible on each song item", async ({ page }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?entryId=fixture-entry-songs");
+    await page.goto("/songs?messageId=fixture-msg-songs-a");
 
     // All three action buttons should exist for each song
     await expect(page.getByTestId("song-pin-btn")).toHaveCount(3);

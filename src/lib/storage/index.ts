@@ -1,16 +1,17 @@
-export type { Settings, LyricsEntry, Song, ChatMessage, StorageExport } from "./types";
+export type { Settings, Message, Song, StorageExport } from "./types";
 export { storageService } from "./storageService";
 export {
   getSettings,
   saveSettings,
-  getLyricsEntries,
-  getLyricsEntry,
-  createLyricsEntry,
-  updateLyricsEntry,
-  deleteLyricsEntry,
+  getMessages,
+  getMessage,
+  createMessage,
+  updateMessage,
+  getAncestors,
+  getLatestLeaf,
   getSongs,
   getSong,
-  getSongsByLyricsEntry,
+  getSongsByMessage,
   createSong,
   updateSong,
   deleteSong,

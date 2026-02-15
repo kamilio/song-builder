@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import type { LyricsEntry, Song, Settings, StorageExport } from "../src/lib/storage/types";
+import type { Message, Song, Settings, StorageExport } from "../src/lib/storage/types";
 
 // Helper: navigate to the app and clear localStorage before each test
 test.beforeEach(async ({ page }) => {
@@ -25,96 +25,231 @@ test("Settings: getSettings returns null when not set", async ({ page }) => {
   expect(result).toBeNull();
 });
 
-// ─── LyricsEntry ─────────────────────────────────────────────────────────────
+// ─── Message ─────────────────────────────────────────────────────────────────
 
-test("LyricsEntry: create and read", async ({ page }) => {
+test("Message: create and read", async ({ page }) => {
   const created = await page.evaluate(() => {
-    return window.storageService.createLyricsEntry({
-      title: "Test Song",
-      style: "pop",
-      commentary: "A test",
-      body: "Verse one\nVerse two",
-      chatHistory: [],
+    return window.storageService.createMessage({
+      role: "user",
+      content: "Write a song about coffee",
+      parentId: null,
     });
   });
 
   expect(created.id).toBeTruthy();
-  expect(created.title).toBe("Test Song");
+  expect(created.role).toBe("user");
+  expect(created.parentId).toBeNull();
   expect(created.deleted).toBe(false);
 
   const fetched = await page.evaluate((id) => {
-    return window.storageService.getLyricsEntry(id);
+    return window.storageService.getMessage(id);
   }, created.id);
 
   expect(fetched).toEqual(created);
 });
 
-test("LyricsEntry: update", async ({ page }) => {
+test("Message: create assistant message with lyrics fields", async ({ page }) => {
+  const userMsg = await page.evaluate(() => {
+    return window.storageService.createMessage({
+      role: "user",
+      content: "Write a pop song",
+      parentId: null,
+    });
+  });
+
+  const assistantMsg = await page.evaluate((parentId) => {
+    return window.storageService.createMessage({
+      role: "assistant",
+      content: "Coffee Dreams lyrics here",
+      parentId,
+      title: "Coffee Dreams",
+      style: "upbeat pop",
+      commentary: "A cheerful coffee song.",
+      lyricsBody: "Wake up to the smell of something brewing",
+      duration: 180,
+    });
+  }, userMsg.id);
+
+  expect(assistantMsg.role).toBe("assistant");
+  expect(assistantMsg.parentId).toBe(userMsg.id);
+  expect(assistantMsg.title).toBe("Coffee Dreams");
+  expect(assistantMsg.style).toBe("upbeat pop");
+  expect(assistantMsg.duration).toBe(180);
+  expect(assistantMsg.deleted).toBe(false);
+});
+
+test("Message: update", async ({ page }) => {
   const created = await page.evaluate(() => {
-    return window.storageService.createLyricsEntry({
+    return window.storageService.createMessage({
+      role: "assistant",
+      content: "Original lyrics",
+      parentId: null,
       title: "Original",
       style: "rock",
-      commentary: "",
-      body: "Body",
-      chatHistory: [],
     });
   });
 
   const updated = await page.evaluate((id) => {
-    return window.storageService.updateLyricsEntry(id, { title: "Updated" });
+    return window.storageService.updateMessage(id, { title: "Updated Title" });
   }, created.id);
 
-  expect(updated?.title).toBe("Updated");
+  expect(updated?.title).toBe("Updated Title");
   expect(updated?.style).toBe("rock");
 });
 
-test("LyricsEntry: soft delete sets deleted flag", async ({ page }) => {
+test("Message: soft delete sets deleted flag", async ({ page }) => {
   const created = await page.evaluate(() => {
-    return window.storageService.createLyricsEntry({
-      title: "To Delete",
-      style: "jazz",
-      commentary: "",
-      body: "Body",
-      chatHistory: [],
+    return window.storageService.createMessage({
+      role: "user",
+      content: "To be deleted",
+      parentId: null,
     });
   });
 
   await page.evaluate((id) => {
-    window.storageService.deleteLyricsEntry(id);
+    window.storageService.updateMessage(id, { deleted: true });
   }, created.id);
 
-  const entry = await page.evaluate((id) => {
-    return window.storageService.getLyricsEntry(id);
+  const msg = await page.evaluate((id) => {
+    return window.storageService.getMessage(id);
   }, created.id);
 
-  expect(entry?.deleted).toBe(true);
+  expect(msg?.deleted).toBe(true);
 
-  // Confirm the entry still exists in the list (soft delete, not hard delete)
-  const allEntries = await page.evaluate(() => window.storageService.getLyricsEntries());
-  const found = allEntries.find((e: LyricsEntry) => e.id === created.id);
+  // Confirm the message still exists in the list (soft delete, not hard delete)
+  const allMessages = await page.evaluate(() => window.storageService.getMessages());
+  const found = allMessages.find((m: Message) => m.id === created.id);
   expect(found).toBeDefined();
 });
 
-test("LyricsEntry: getLyricsEntries returns all entries", async ({ page }) => {
+test("Message: getMessages returns all messages", async ({ page }) => {
   await page.evaluate(() => {
-    window.storageService.createLyricsEntry({
-      title: "Entry 1",
-      style: "pop",
-      commentary: "",
-      body: "Body 1",
-      chatHistory: [],
+    window.storageService.createMessage({
+      role: "user",
+      content: "Message 1",
+      parentId: null,
     });
-    window.storageService.createLyricsEntry({
-      title: "Entry 2",
-      style: "rock",
-      commentary: "",
-      body: "Body 2",
-      chatHistory: [],
+    window.storageService.createMessage({
+      role: "assistant",
+      content: "Message 2",
+      parentId: null,
     });
   });
 
-  const entries = await page.evaluate(() => window.storageService.getLyricsEntries());
-  expect(entries).toHaveLength(2);
+  const messages = await page.evaluate(() => window.storageService.getMessages());
+  expect(messages).toHaveLength(2);
+});
+
+test("Message: getAncestors returns root-first path", async ({ page }) => {
+  // Build a 3-message chain: root → child → grandchild
+  const root = await page.evaluate(() => {
+    return window.storageService.createMessage({
+      role: "user",
+      content: "Root",
+      parentId: null,
+    });
+  });
+
+  const child = await page.evaluate((rootId) => {
+    return window.storageService.createMessage({
+      role: "assistant",
+      content: "Child",
+      parentId: rootId,
+    });
+  }, root.id);
+
+  const grandchild = await page.evaluate((childId) => {
+    return window.storageService.createMessage({
+      role: "user",
+      content: "Grandchild",
+      parentId: childId,
+    });
+  }, child.id);
+
+  // getAncestors(grandchild.id) should return [root, child, grandchild]
+  const ancestors = await page.evaluate((id) => {
+    return window.storageService.getAncestors(id);
+  }, grandchild.id);
+
+  expect(ancestors).toHaveLength(3);
+  expect(ancestors[0].id).toBe(root.id);
+  expect(ancestors[1].id).toBe(child.id);
+  expect(ancestors[2].id).toBe(grandchild.id);
+});
+
+test("Message: getAncestors for root returns just the root", async ({ page }) => {
+  const root = await page.evaluate(() => {
+    return window.storageService.createMessage({
+      role: "user",
+      content: "Root only",
+      parentId: null,
+    });
+  });
+
+  const ancestors = await page.evaluate((id) => {
+    return window.storageService.getAncestors(id);
+  }, root.id);
+
+  expect(ancestors).toHaveLength(1);
+  expect(ancestors[0].id).toBe(root.id);
+});
+
+test("Message: getLatestLeaf returns the leaf with newest createdAt", async ({ page }) => {
+  // Build a tree: root → child1, root → child2 (child2 is newer)
+  const root = await page.evaluate(() => {
+    return window.storageService.createMessage({
+      role: "user",
+      content: "Root",
+      parentId: null,
+    });
+  });
+
+  const child1 = await page.evaluate((rootId) => {
+    return window.storageService.createMessage({
+      role: "assistant",
+      content: "Branch 1",
+      parentId: rootId,
+    });
+  }, root.id);
+
+  // child2 created slightly after child1
+  await page.waitForTimeout(5);
+
+  const child2 = await page.evaluate((rootId) => {
+    return window.storageService.createMessage({
+      role: "assistant",
+      content: "Branch 2",
+      parentId: rootId,
+    });
+  }, root.id);
+
+  const latestLeaf = await page.evaluate((id) => {
+    return window.storageService.getLatestLeaf(id);
+  }, root.id);
+
+  // child2 was created later so it is the latest leaf
+  expect(latestLeaf?.id).toBe(child2.id);
+
+  // Suppress "unused variable" — child1 is referenced via root, verifying branching
+  expect(child1.parentId).toBe(root.id);
+});
+
+test("Message: getLatestLeaf returns the message itself when it has no children", async ({
+  page,
+}) => {
+  const msg = await page.evaluate(() => {
+    return window.storageService.createMessage({
+      role: "user",
+      content: "Leaf node",
+      parentId: null,
+    });
+  });
+
+  const latestLeaf = await page.evaluate((id) => {
+    return window.storageService.getLatestLeaf(id);
+  }, msg.id);
+
+  expect(latestLeaf?.id).toBe(msg.id);
 });
 
 // ─── Song ─────────────────────────────────────────────────────────────────────
@@ -122,13 +257,14 @@ test("LyricsEntry: getLyricsEntries returns all entries", async ({ page }) => {
 test("Song: create and read", async ({ page }) => {
   const created = await page.evaluate(() => {
     return window.storageService.createSong({
-      lyricsEntryId: "entry-1",
+      messageId: "msg-1",
       title: "My Song",
       audioUrl: "https://example.com/audio.mp3",
     });
   });
 
   expect(created.id).toBeTruthy();
+  expect(created.messageId).toBe("msg-1");
   expect(created.pinned).toBe(false);
   expect(created.deleted).toBe(false);
 
@@ -142,7 +278,7 @@ test("Song: create and read", async ({ page }) => {
 test("Song: soft delete sets deleted flag", async ({ page }) => {
   const created = await page.evaluate(() => {
     return window.storageService.createSong({
-      lyricsEntryId: "entry-1",
+      messageId: "msg-1",
       title: "Song to Delete",
       audioUrl: "https://example.com/audio.mp3",
     });
@@ -167,7 +303,7 @@ test("Song: soft delete sets deleted flag", async ({ page }) => {
 test("Song: pin and unpin", async ({ page }) => {
   const created = await page.evaluate(() => {
     return window.storageService.createSong({
-      lyricsEntryId: "entry-1",
+      messageId: "msg-1",
       title: "Song to Pin",
       audioUrl: "https://example.com/audio.mp3",
     });
@@ -188,30 +324,30 @@ test("Song: pin and unpin", async ({ page }) => {
   expect(song?.pinned).toBe(false);
 });
 
-test("Song: getSongsByLyricsEntry filters correctly", async ({ page }) => {
+test("Song: getSongsByMessage filters correctly", async ({ page }) => {
   await page.evaluate(() => {
     window.storageService.createSong({
-      lyricsEntryId: "entry-A",
+      messageId: "msg-A",
       title: "Song A1",
       audioUrl: "https://example.com/a1.mp3",
     });
     window.storageService.createSong({
-      lyricsEntryId: "entry-A",
+      messageId: "msg-A",
       title: "Song A2",
       audioUrl: "https://example.com/a2.mp3",
     });
     window.storageService.createSong({
-      lyricsEntryId: "entry-B",
+      messageId: "msg-B",
       title: "Song B1",
       audioUrl: "https://example.com/b1.mp3",
     });
   });
 
-  const entrySongs = await page.evaluate(() =>
-    window.storageService.getSongsByLyricsEntry("entry-A")
+  const msgSongs = await page.evaluate(() =>
+    window.storageService.getSongsByMessage("msg-A")
   );
-  expect(entrySongs).toHaveLength(2);
-  expect(entrySongs.every((s: Song) => s.lyricsEntryId === "entry-A")).toBe(true);
+  expect(msgSongs).toHaveLength(2);
+  expect(msgSongs.every((s: Song) => s.messageId === "msg-A")).toBe(true);
 });
 
 // ─── Import / Export ──────────────────────────────────────────────────────────
@@ -219,15 +355,13 @@ test("Song: getSongsByLyricsEntry filters correctly", async ({ page }) => {
 test("export serializes all data", async ({ page }) => {
   await page.evaluate(() => {
     window.storageService.saveSettings({ poeApiKey: "export-key", numSongs: 3 });
-    window.storageService.createLyricsEntry({
-      title: "Export Entry",
-      style: "classical",
-      commentary: "Export test",
-      body: "Body",
-      chatHistory: [],
+    window.storageService.createMessage({
+      role: "user",
+      content: "Export test message",
+      parentId: null,
     });
     window.storageService.createSong({
-      lyricsEntryId: "entry-1",
+      messageId: "msg-1",
       title: "Export Song",
       audioUrl: "https://example.com/export.mp3",
     });
@@ -236,30 +370,39 @@ test("export serializes all data", async ({ page }) => {
   const exported = await page.evaluate(() => window.storageService.export());
 
   expect(exported.settings?.poeApiKey).toBe("export-key");
-  expect(exported.lyricsEntries).toHaveLength(1);
+  expect(exported.messages).toHaveLength(1);
   expect(exported.songs).toHaveLength(1);
 });
 
 test("import loads data into localStorage", async ({ page }) => {
   const fixture: StorageExport = {
     settings: { poeApiKey: "imported-key", numSongs: 7 },
-    lyricsEntries: [
+    messages: [
       {
-        id: "imported-entry-1",
+        id: "imported-msg-1",
+        role: "user",
+        content: "Hello",
+        parentId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        deleted: false,
+      },
+      {
+        id: "imported-msg-2",
+        role: "assistant",
+        content: "Imported lyrics here",
+        parentId: "imported-msg-1",
         title: "Imported Entry",
         style: "blues",
         commentary: "Imported commentary",
-        body: "Imported body",
-        chatHistory: [{ role: "user", content: "Hello" }],
-        createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
+        lyricsBody: "Imported body",
+        createdAt: "2026-01-01T00:01:00.000Z",
         deleted: false,
       },
     ],
     songs: [
       {
         id: "imported-song-1",
-        lyricsEntryId: "imported-entry-1",
+        messageId: "imported-msg-2",
         title: "Imported Song",
         audioUrl: "https://example.com/imported.mp3",
         pinned: true,
@@ -277,10 +420,10 @@ test("import loads data into localStorage", async ({ page }) => {
   expect(settings?.poeApiKey).toBe("imported-key");
   expect(settings?.numSongs).toBe(7);
 
-  const entries = await page.evaluate(() => window.storageService.getLyricsEntries());
-  expect(entries).toHaveLength(1);
-  expect(entries[0].title).toBe("Imported Entry");
-  expect(entries[0].chatHistory[0].content).toBe("Hello");
+  const messages = await page.evaluate(() => window.storageService.getMessages());
+  expect(messages).toHaveLength(2);
+  expect(messages[0].content).toBe("Hello");
+  expect(messages[1].title).toBe("Imported Entry");
 
   const songs = await page.evaluate(() => window.storageService.getSongs());
   expect(songs).toHaveLength(1);
@@ -292,15 +435,13 @@ test("export then import round-trip restores all data", async ({ page }) => {
   // Seed initial data
   await page.evaluate(() => {
     window.storageService.saveSettings({ poeApiKey: "roundtrip-key", numSongs: 4 });
-    window.storageService.createLyricsEntry({
-      title: "Round Trip Entry",
-      style: "country",
-      commentary: "Round trip test",
-      body: "Round trip body",
-      chatHistory: [],
+    window.storageService.createMessage({
+      role: "user",
+      content: "Round trip message",
+      parentId: null,
     });
     window.storageService.createSong({
-      lyricsEntryId: "rt-entry",
+      messageId: "rt-msg",
       title: "Round Trip Song",
       audioUrl: "https://example.com/rt.mp3",
     });
@@ -314,7 +455,7 @@ test("export then import round-trip restores all data", async ({ page }) => {
 
   const afterClear = await page.evaluate(() => window.storageService.export());
   expect(afterClear.settings).toBeNull();
-  expect(afterClear.lyricsEntries).toHaveLength(0);
+  expect(afterClear.messages).toHaveLength(0);
 
   // Import exported data
   await page.evaluate((data) => {
@@ -325,8 +466,8 @@ test("export then import round-trip restores all data", async ({ page }) => {
   const restored = await page.evaluate(() => window.storageService.export());
   expect(restored.settings?.poeApiKey).toBe("roundtrip-key");
   expect(restored.settings?.numSongs).toBe(4);
-  expect(restored.lyricsEntries).toHaveLength(1);
-  expect(restored.lyricsEntries[0].title).toBe("Round Trip Entry");
+  expect(restored.messages).toHaveLength(1);
+  expect(restored.messages[0].content).toBe("Round trip message");
   expect(restored.songs).toHaveLength(1);
   expect(restored.songs[0].title).toBe("Round Trip Song");
 });

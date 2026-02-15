@@ -26,7 +26,7 @@ import { baseFixture } from "../fixtures/index";
 test.describe("Lyrics Generator page", () => {
   test.beforeEach(async ({ page }) => {
     await seedFixture(page, baseFixture);
-    await page.goto("/lyrics/fixture-entry-1");
+    await page.goto("/lyrics/fixture-msg-1a");
   });
 
   test("left panel displays frontmatter fields", async ({ page }) => {
@@ -88,7 +88,7 @@ test.describe("Lyrics Generator page", () => {
     page,
   }) => {
     await page.getByTestId("generate-songs-btn").click();
-    await expect(page).toHaveURL(/\/songs\?entryId=fixture-entry-1/);
+    await expect(page).toHaveURL(/\/songs\?messageId=fixture-msg-1a/);
   });
 });
 
@@ -118,7 +118,7 @@ test.describe("Lyrics Generator – empty / new entry", () => {
 test(
   "@screenshot:lyrics lyrics generator page renders correctly with seeded data",
   async ({ page }) => {
-    await screenshotPage(page, "/lyrics/fixture-entry-1", baseFixture, {
+    await screenshotPage(page, "/lyrics/fixture-msg-1a", baseFixture, {
       path: "screenshots/lyrics-generator.png",
     });
 
@@ -140,7 +140,7 @@ test(
 test.describe("Lyrics Generator – chat integration (US-010)", () => {
   test.beforeEach(async ({ page }) => {
     await seedFixture(page, baseFixture);
-    await page.goto("/lyrics/fixture-entry-1");
+    await page.goto("/lyrics/fixture-msg-1a");
   });
 
   test("submitting a message shows it in the chat history and the left panel updates with MockLLMClient fixture lyrics", async ({
@@ -187,18 +187,19 @@ test.describe("Lyrics Generator – chat integration (US-010)", () => {
   test("chat history persists to localStorage and survives a reload", async ({
     page,
   }) => {
-    // Submit a message and wait for the assistant response to appear.
+    // Submit a message and wait for the page to navigate to the new assistant message.
     await page.getByTestId("chat-input").fill("Make it more energetic");
     await page.getByTestId("chat-submit").click();
 
-    // Wait for the assistant reply.
-    const assistantMessages = page.getByTestId("chat-message-assistant");
-    await expect(assistantMessages.last()).toBeVisible({ timeout: 5000 });
+    // In the new model, submitting creates user+assistant messages and navigates to
+    // the new assistant message URL. Wait for URL to change from the fixture message.
+    await expect(page).not.toHaveURL(/fixture-msg-1a$/, { timeout: 5000 });
+    await expect(page).toHaveURL(/\/lyrics\/.+/, { timeout: 5000 });
 
-    // Reload the page.
+    // Reload the page to verify persistence.
     await page.reload();
 
-    // The full chat history should still be present after reload.
+    // The full ancestor path should still be visible (includes "Make it more energetic").
     const userMsgs = page.getByTestId("chat-message-user");
     await expect(userMsgs.last()).toContainText("Make it more energetic");
     await expect(page.getByTestId("chat-message-assistant").last()).toBeVisible();

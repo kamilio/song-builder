@@ -1,8 +1,8 @@
-import type { Settings, LyricsEntry, Song, StorageExport } from "./types";
+import type { Settings, Message, Song, StorageExport } from "./types";
 
 const KEYS = {
   settings: "song-builder:settings",
-  lyricsEntries: "song-builder:lyrics-entries",
+  messages: "song-builder:messages",
   songs: "song-builder:songs",
 } as const;
 
@@ -34,52 +34,105 @@ export function saveSettings(settings: Settings): void {
   writeJSON(KEYS.settings, settings);
 }
 
-// ─── LyricsEntry ─────────────────────────────────────────────────────────────
+// ─── Message ─────────────────────────────────────────────────────────────────
 
-export function getLyricsEntries(): LyricsEntry[] {
-  return readJSON<LyricsEntry[]>(KEYS.lyricsEntries) ?? [];
+export function getMessages(): Message[] {
+  return readJSON<Message[]>(KEYS.messages) ?? [];
 }
 
-export function getLyricsEntry(id: string): LyricsEntry | null {
-  return getLyricsEntries().find((e) => e.id === id) ?? null;
+export function getMessage(id: string): Message | null {
+  return getMessages().find((m) => m.id === id) ?? null;
 }
 
-export function createLyricsEntry(
-  data: Omit<LyricsEntry, "id" | "createdAt" | "updatedAt" | "deleted">
-): LyricsEntry {
-  const now = new Date().toISOString();
-  const entry: LyricsEntry = {
+export function createMessage(
+  data: Omit<Message, "id" | "createdAt" | "deleted">
+): Message {
+  const message: Message = {
     ...data,
     id: generateId(),
-    createdAt: now,
-    updatedAt: now,
+    createdAt: new Date().toISOString(),
     deleted: false,
   };
-  const entries = getLyricsEntries();
-  writeJSON(KEYS.lyricsEntries, [...entries, entry]);
-  return entry;
+  const messages = getMessages();
+  writeJSON(KEYS.messages, [...messages, message]);
+  return message;
 }
 
-export function updateLyricsEntry(
+export function updateMessage(
   id: string,
-  data: Partial<Omit<LyricsEntry, "id" | "createdAt">>
-): LyricsEntry | null {
-  const entries = getLyricsEntries();
-  const idx = entries.findIndex((e) => e.id === id);
+  data: Partial<Omit<Message, "id" | "createdAt">>
+): Message | null {
+  const messages = getMessages();
+  const idx = messages.findIndex((m) => m.id === id);
   if (idx === -1) return null;
-  const updated: LyricsEntry = {
-    ...entries[idx],
-    ...data,
-    updatedAt: new Date().toISOString(),
-  };
-  entries[idx] = updated;
-  writeJSON(KEYS.lyricsEntries, entries);
+  const updated: Message = { ...messages[idx], ...data };
+  messages[idx] = updated;
+  writeJSON(KEYS.messages, messages);
   return updated;
 }
 
-export function deleteLyricsEntry(id: string): boolean {
-  const result = updateLyricsEntry(id, { deleted: true });
-  return result !== null;
+/**
+ * Walk parentId links from the given messageId up to the root.
+ * Returns the path in root-first order: [root, ..., messageId].
+ * Handles cycles/orphans gracefully by stopping when no parent is found.
+ */
+export function getAncestors(messageId: string): Message[] {
+  const messages = getMessages();
+  const byId = new Map(messages.map((m) => [m.id, m]));
+
+  const path: Message[] = [];
+  const visited = new Set<string>();
+  let current = byId.get(messageId);
+
+  while (current) {
+    if (visited.has(current.id)) break; // cycle guard
+    visited.add(current.id);
+    path.unshift(current);
+    if (current.parentId === null) break;
+    current = byId.get(current.parentId);
+  }
+
+  return path;
+}
+
+/**
+ * Find the most recently created leaf descendant of the given messageId.
+ * A leaf is a message that has no children.
+ * Returns the message itself if it has no descendants.
+ */
+export function getLatestLeaf(messageId: string): Message | null {
+  const messages = getMessages();
+  const byId = new Map(messages.map((m) => [m.id, m]));
+  const root = byId.get(messageId);
+  if (!root) return null;
+
+  // Build children index
+  const children = new Map<string, Message[]>();
+  for (const m of messages) {
+    if (m.parentId !== null) {
+      const list = children.get(m.parentId) ?? [];
+      list.push(m);
+      children.set(m.parentId, list);
+    }
+  }
+
+  // DFS to collect all descendants; track the latest leaf
+  let latestLeaf: Message = root;
+  const stack: Message[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    const kids = children.get(node.id) ?? [];
+    if (kids.length === 0) {
+      // leaf node — compare by createdAt
+      if (node.createdAt > latestLeaf.createdAt) {
+        latestLeaf = node;
+      }
+    } else {
+      stack.push(...kids);
+    }
+  }
+
+  return latestLeaf;
 }
 
 // ─── Song ─────────────────────────────────────────────────────────────────────
@@ -92,8 +145,8 @@ export function getSong(id: string): Song | null {
   return getSongs().find((s) => s.id === id) ?? null;
 }
 
-export function getSongsByLyricsEntry(lyricsEntryId: string): Song[] {
-  return getSongs().filter((s) => s.lyricsEntryId === lyricsEntryId);
+export function getSongsByMessage(messageId: string): Song[] {
+  return getSongs().filter((s) => s.messageId === messageId);
 }
 
 export function createSong(
@@ -139,7 +192,7 @@ export function pinSong(id: string, pinned: boolean): boolean {
 export function exportStorage(): StorageExport {
   return {
     settings: getSettings(),
-    lyricsEntries: getLyricsEntries(),
+    messages: getMessages(),
     songs: getSongs(),
   };
 }
@@ -148,8 +201,8 @@ export function importStorage(data: StorageExport): void {
   if (data.settings !== null && data.settings !== undefined) {
     writeJSON(KEYS.settings, data.settings);
   }
-  if (Array.isArray(data.lyricsEntries)) {
-    writeJSON(KEYS.lyricsEntries, data.lyricsEntries);
+  if (Array.isArray(data.messages)) {
+    writeJSON(KEYS.messages, data.messages);
   }
   if (Array.isArray(data.songs)) {
     writeJSON(KEYS.songs, data.songs);
@@ -162,16 +215,17 @@ export const storageService = {
   // Settings
   getSettings,
   saveSettings,
-  // LyricsEntry
-  getLyricsEntries,
-  getLyricsEntry,
-  createLyricsEntry,
-  updateLyricsEntry,
-  deleteLyricsEntry,
+  // Message
+  getMessages,
+  getMessage,
+  createMessage,
+  updateMessage,
+  getAncestors,
+  getLatestLeaf,
   // Song
   getSongs,
   getSong,
-  getSongsByLyricsEntry,
+  getSongsByMessage,
   createSong,
   updateSong,
   deleteSong,
