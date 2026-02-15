@@ -1,5 +1,5 @@
 /**
- * SessionView page (US-014, US-015, US-016, US-017)
+ * SessionView page (US-014, US-015, US-016, US-017, US-018)
  *
  * Route: /image/sessions/:id
  *
@@ -28,14 +28,26 @@
  *
  * US-017: Each thumbnail is wrapped in an anchor tag that opens the image
  * URL in a new browser tab (target="_blank"). No in-app detail route is used.
+ *
+ * US-018: Bottom input bar contains a prompt textarea and Generate button.
+ * The textarea is pre-populated with the prompt from the latest generation
+ * on load and is never programmatically cleared. Clicking Generate creates a
+ * new ImageGeneration (stepId auto-incremented by the storage service) and
+ * fires parallel generateImage calls. The Generate button is disabled while
+ * a generation is in-flight.
  */
 
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ImageIcon, Pin, Settings, Bug } from "lucide-react";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
 import { imageStorageService } from "@/image/lib/storage";
 import type { ImageSession, ImageGeneration, ImageItem } from "@/image/lib/storage";
+import { createLLMClient } from "@/shared/lib/llm/factory";
+import { getSettings } from "@/music/lib/storage/storageService";
 import { log, getAll } from "@/music/lib/actionLog";
 
 // ─── Navigation items ──────────────────────────────────────────────────────
@@ -311,13 +323,95 @@ function loadSession(id: string | undefined): SessionData | null {
   };
 }
 
+/** Returns the prompt from the generation with the highest stepId, or empty string. */
+function latestPrompt(generations: ImageGeneration[]): string {
+  if (generations.length === 0) return "";
+  return generations.reduce((best, g) => (g.stepId > best.stepId ? g : best)).prompt;
+}
+
 export default function SessionView() {
   const { id } = useParams<{ id: string }>();
 
-  // Derive session data synchronously from storage on each render.
-  // This avoids the need for useEffect + setState and keeps the logic
-  // straightforward since storage reads are synchronous.
-  const data = loadSession(id);
+  // Initialise data from storage once on mount (id is stable for the lifetime of this view).
+  const [data, setData] = useState<SessionData | null>(() => loadSession(id));
+
+  // Prompt text — pre-populated with the latest generation's prompt (US-018).
+  // Never cleared programmatically: the user owns the textarea value.
+  const [prompt, setPrompt] = useState<string>(() =>
+    latestPrompt(data?.generations ?? [])
+  );
+
+  // True while a generateImage call is in-flight (disables Generate button).
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Used to ignore stale setState calls if the component unmounts mid-flight.
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  const handleGenerate = useCallback(async () => {
+    if (isGenerating) return;
+    const trimmed = prompt.trim();
+    if (!trimmed || !id || !data) return;
+
+    setIsGenerating(true);
+
+    log({
+      category: "user:action",
+      action: "image:generate:start",
+      data: { sessionId: id },
+    });
+
+    try {
+      const musicSettings = getSettings();
+      const imageSettings = imageStorageService.getImageSettings();
+      const numImages = imageSettings?.numImages ?? 3;
+
+      const client = createLLMClient(musicSettings?.poeApiKey ?? undefined);
+
+      // Create the generation record first (storage auto-assigns next stepId).
+      const generation = imageStorageService.createGeneration({
+        sessionId: id,
+        prompt: trimmed,
+      });
+
+      // Fire parallel image requests.
+      const urls = await client.generateImage(trimmed, numImages);
+
+      if (!isMounted.current) return;
+
+      // Persist each returned URL as an ImageItem.
+      for (const url of urls) {
+        imageStorageService.createItem({ generationId: generation.id, url });
+      }
+
+      log({
+        category: "llm:response",
+        action: "image:generate:complete",
+        data: { sessionId: id, generationId: generation.id, count: urls.length },
+      });
+
+      // Reload session data from storage so the UI reflects the new generation.
+      const updated = loadSession(id);
+      if (isMounted.current) {
+        setData(updated);
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Generation failed";
+      log({
+        category: "llm:response",
+        action: "image:generate:error",
+        data: { sessionId: id, error: errMsg },
+      });
+    } finally {
+      if (isMounted.current) {
+        setIsGenerating(false);
+      }
+    }
+  }, [id, data, prompt, isGenerating]);
 
   if (!data) {
     return <Navigate to="/image" replace />;
@@ -370,15 +464,35 @@ export default function SessionView() {
           <ThumbnailStrip generations={data.generations} items={data.items} />
         </div>
 
-        {/* ── Bottom input bar ──────────────────────────────────────────── */}
+        {/* ── Bottom input bar (US-018) ──────────────────────────────── */}
         <div
           className="border-t bg-background px-4 py-3 shrink-0"
           data-testid="bottom-bar"
         >
-          {/* Placeholder — content filled by US-018 */}
-          <p className="text-xs text-muted-foreground" data-testid="bottom-bar-placeholder">
-            Prompt input
-          </p>
+          <div className="flex gap-3 items-end max-w-3xl mx-auto">
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe the image you want to generate…"
+              className="resize-none min-h-[72px] text-sm flex-1"
+              aria-label="Image prompt"
+              data-testid="prompt-input"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void handleGenerate();
+                }
+              }}
+            />
+            <Button
+              onClick={() => void handleGenerate()}
+              disabled={isGenerating || !prompt.trim()}
+              data-testid="generate-btn"
+              className="shrink-0"
+            >
+              {isGenerating ? "Generating…" : "Generate"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
