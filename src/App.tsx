@@ -1,16 +1,16 @@
 import { ReactNode, useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Music } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Breadcrumb } from "@/components/Breadcrumb";
-import { NavMenu } from "@/components/NavMenu";
-import Home from "@/pages/Home";
-import LyricsList from "@/pages/LyricsList";
-import LyricsGenerator from "@/pages/LyricsGenerator";
-import SongGenerator from "@/pages/SongGenerator";
-import PinnedSongs from "@/pages/PinnedSongs";
-import Settings from "@/pages/Settings";
-import { log } from "@/lib/actionLog";
+import { Breadcrumb } from "@/music/components/Breadcrumb";
+import { NavMenu } from "@/music/components/NavMenu";
+import Home from "@/music/pages/Home";
+import LyricsList from "@/music/pages/LyricsList";
+import LyricsGenerator from "@/music/pages/LyricsGenerator";
+import SongGenerator from "@/music/pages/SongGenerator";
+import PinnedSongs from "@/music/pages/PinnedSongs";
+import Settings from "@/music/pages/Settings";
+import { log } from "@/music/lib/actionLog";
 
 /**
  * Logs every route change to the in-memory action log.
@@ -43,7 +43,7 @@ function TopBar() {
     >
       {/* Branding */}
       <Link
-        to="/"
+        to="/music"
         className="flex items-center gap-2 shrink-0 hover:opacity-75 transition-opacity"
         aria-label="Song Builder home"
       >
@@ -82,12 +82,15 @@ export default function App() {
     <BrowserRouter>
       <RouteLogger />
       <Routes>
-        {/* Home — no top bar */}
-        <Route path="/" element={<Home />} />
+        {/* Root redirect */}
+        <Route path="/" element={<Navigate to="/music" replace />} />
 
-        {/* All other pages — wrapped in PageLayout with TopBar */}
+        {/* Music — Home has no top bar */}
+        <Route path="/music" element={<Home />} />
+
+        {/* All other music pages — wrapped in PageLayout with TopBar */}
         <Route
-          path="/lyrics"
+          path="/music/lyrics"
           element={
             <PageLayout>
               <LyricsList />
@@ -95,7 +98,7 @@ export default function App() {
           }
         />
         <Route
-          path="/lyrics/new"
+          path="/music/lyrics/new"
           element={
             <PageLayout>
               <LyricsGenerator />
@@ -103,7 +106,7 @@ export default function App() {
           }
         />
         <Route
-          path="/lyrics/:id"
+          path="/music/lyrics/:id"
           element={
             <PageLayout>
               <LyricsGenerator />
@@ -111,7 +114,7 @@ export default function App() {
           }
         />
         <Route
-          path="/lyrics/:id/songs"
+          path="/music/lyrics/:id/songs"
           element={
             <PageLayout>
               <SongGenerator />
@@ -119,7 +122,7 @@ export default function App() {
           }
         />
         <Route
-          path="/songs"
+          path="/music/songs"
           element={
             <PageLayout>
               <SongGenerator />
@@ -127,7 +130,7 @@ export default function App() {
           }
         />
         <Route
-          path="/pinned"
+          path="/music/pinned"
           element={
             <PageLayout>
               <PinnedSongs />
@@ -135,7 +138,7 @@ export default function App() {
           }
         />
         <Route
-          path="/settings"
+          path="/music/settings"
           element={
             <PageLayout>
               <Settings />

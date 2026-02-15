@@ -11,7 +11,7 @@
  * Songs reference the assistant Message whose lyrics were used (messageId).
  */
 
-import type { StorageExport } from "../src/lib/storage/types";
+import type { StorageExport } from "../src/music/lib/storage/types";
 
 /** Empty state: no settings, no messages, no songs. */
 export const emptyFixture: StorageExport = {
