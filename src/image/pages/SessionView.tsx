@@ -35,6 +35,10 @@
  * new ImageGeneration (stepId auto-incremented by the storage service) and
  * fires parallel generateImage calls. The Generate button is disabled while
  * a generation is in-flight.
+ *
+ * US-020: Clicking Generate with no poeApiKey shows ApiKeyMissingModal.
+ * No generateImage call is made when the modal is shown. The modal contains
+ * a link to /settings. Dismissing the modal does not navigate away.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -44,6 +48,8 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
+import { ApiKeyMissingModal } from "@/shared/components/ApiKeyMissingModal";
+import { useApiKeyGuard } from "@/shared/hooks/useApiKeyGuard";
 import { imageStorageService } from "@/image/lib/storage";
 import type { ImageSession, ImageGeneration, ImageItem } from "@/image/lib/storage";
 import { createLLMClient } from "@/shared/lib/llm/factory";
@@ -345,6 +351,9 @@ export default function SessionView() {
   // True while a generateImage call is in-flight (disables Generate button).
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // API key guard (US-020): shows ApiKeyMissingModal when poeApiKey is absent.
+  const { isModalOpen: isApiKeyModalOpen, guardAction, closeModal: closeApiKeyModal } = useApiKeyGuard();
+
   // Used to ignore stale setState calls if the component unmounts mid-flight.
   const isMounted = useRef(true);
   useEffect(() => {
@@ -359,6 +368,8 @@ export default function SessionView() {
 
   const handleGenerate = useCallback(async () => {
     if (isGenerating) return;
+    // Guard: show modal and abort if no API key is configured (US-020).
+    if (!guardAction()) return;
     const trimmed = prompt.trim();
     if (!trimmed || !id || !data) return;
 
@@ -416,13 +427,14 @@ export default function SessionView() {
         setIsGenerating(false);
       }
     }
-  }, [id, data, prompt, isGenerating]);
+  }, [id, data, prompt, isGenerating, guardAction]);
 
   if (!data) {
     return <Navigate to="/image" replace />;
   }
 
   return (
+    <>
     <div className="flex flex-col h-screen" data-testid="session-view">
       <TopBar />
 
@@ -509,5 +521,7 @@ export default function SessionView() {
         </div>
       </div>
     </div>
+    {isApiKeyModalOpen && <ApiKeyMissingModal onClose={closeApiKeyModal} />}
+    </>
   );
 }
