@@ -1,5 +1,5 @@
 /**
- * SessionView page (US-014, US-015, US-016, US-017, US-018, US-021)
+ * SessionView page (US-014, US-015, US-016, US-017, US-018, US-021, US-022)
  *
  * Route: /image/sessions/:id
  *
@@ -46,6 +46,11 @@
  * with a 1:1 ratio). No new thumbnails appear in the panel until the
  * generation step completes. Skeletons are replaced by real images when
  * generation finishes.
+ *
+ * US-022: Per-image inline error state. Each of the N parallel generateImage
+ * requests is fired independently. If one rejects, only that slot shows an
+ * inline error card — sibling slots that succeeded render their images
+ * normally. No full-page error is shown.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -267,6 +272,37 @@ function SkeletonCard() {
   );
 }
 
+// ─── ErrorCard ─────────────────────────────────────────────────────────────
+
+/**
+ * Inline error card shown for a single failed image slot (US-022).
+ * Displayed at the same size as a real image card so the layout stays stable.
+ */
+function ErrorCard({ message }: { message: string }) {
+  return (
+    <div
+      className="rounded-lg overflow-hidden border bg-destructive/10 border-destructive/30 shadow-sm flex flex-col items-center justify-center gap-2 p-4"
+      data-testid="image-error-card"
+      style={{ width: "320px", height: "320px" }}
+    >
+      <p className="text-destructive text-sm font-medium text-center">Image failed</p>
+      <p className="text-destructive/80 text-xs text-center line-clamp-3">{message}</p>
+    </div>
+  );
+}
+
+// ─── SlotResult type ───────────────────────────────────────────────────────
+
+/**
+ * Represents the outcome of a single image generation slot (US-022).
+ * A slot is either a successfully stored item or a failed request with an
+ * error message. Used to render per-slot error cards alongside sibling
+ * images that succeeded.
+ */
+type SlotResult =
+  | { kind: "item"; item: ImageItem }
+  | { kind: "error"; message: string };
+
 // ─── MainPane ──────────────────────────────────────────────────────────────
 
 interface MainPaneProps {
@@ -274,14 +310,22 @@ interface MainPaneProps {
   items: ImageItem[];
   /** When set, show N skeleton cards instead of the real latest images (US-021). */
   skeletonCount?: number;
+  /**
+   * Per-slot results from the most recent generation attempt (US-022).
+   * When provided, each slot renders either an image card or an inline error
+   * card — allowing sibling successes to display normally alongside failures.
+   * Cleared once new storage-backed items are loaded.
+   */
+  slotResults?: SlotResult[];
 }
 
 /**
  * Renders images from the generation with the highest stepId.
  * Shows skeleton cards while generation is in-flight (US-021).
+ * Shows per-slot error cards for failed slots (US-022).
  * Shows an empty state when no generations exist.
  */
-function MainPane({ generations, items, skeletonCount }: MainPaneProps) {
+function MainPane({ generations, items, skeletonCount, slotResults }: MainPaneProps) {
   // While generation is in-flight, show skeleton placeholders (US-021).
   if (skeletonCount !== undefined && skeletonCount > 0) {
     return (
@@ -292,6 +336,37 @@ function MainPane({ generations, items, skeletonCount }: MainPaneProps) {
         {Array.from({ length: skeletonCount }, (_, i) => (
           <SkeletonCard key={i} />
         ))}
+      </div>
+    );
+  }
+
+  // After generation completes, show per-slot results (US-022).
+  // This includes inline error cards for failed slots and image cards for
+  // successful slots, before the next data reload replaces slotResults.
+  if (slotResults && slotResults.length > 0) {
+    return (
+      <div
+        className="flex flex-wrap gap-4 content-start"
+        data-testid="main-pane-images"
+      >
+        {slotResults.map((slot, i) =>
+          slot.kind === "item" ? (
+            <div
+              key={slot.item.id}
+              className="rounded-lg overflow-hidden border bg-card shadow-sm"
+              data-testid="image-card"
+            >
+              <img
+                src={slot.item.url}
+                alt=""
+                className="w-full h-auto block"
+                style={{ maxWidth: "320px" }}
+              />
+            </div>
+          ) : (
+            <ErrorCard key={`error-${i}`} message={slot.message} />
+          )
+        )}
       </div>
     );
   }
@@ -400,6 +475,11 @@ export default function SessionView() {
   // in-flight (US-021). Set to numImages at generation start, cleared on finish.
   const [skeletonCount, setSkeletonCount] = useState<number | undefined>(undefined);
 
+  // Per-slot results after generation completes (US-022).
+  // Each entry is either a stored ImageItem or an error message for that slot.
+  // Cleared when the next generation starts (replaced by skeleton cards).
+  const [slotResults, setSlotResults] = useState<SlotResult[] | undefined>(undefined);
+
   // API key guard (US-020): shows ApiKeyMissingModal when poeApiKey is absent.
   const { isModalOpen: isApiKeyModalOpen, guardAction, closeModal: closeApiKeyModal } = useApiKeyGuard();
 
@@ -423,6 +503,8 @@ export default function SessionView() {
     if (!trimmed || !id || !data) return;
 
     setIsGenerating(true);
+    // Clear any previous per-slot results when a new generation starts (US-022).
+    setSlotResults(undefined);
 
     log({
       category: "user:action",
@@ -446,28 +528,49 @@ export default function SessionView() {
         prompt: trimmed,
       });
 
-      // Fire parallel image requests.
-      const urls = await client.generateImage(trimmed, numImages);
+      // Fire N independent parallel requests using allSettled so that a single
+      // failure does not abort sibling requests (US-022).
+      const settled = await Promise.allSettled(
+        Array.from({ length: numImages }, () => client.generateImage(trimmed, 1))
+      );
 
       if (!isMounted.current) return;
 
-      // Persist each returned URL as an ImageItem.
-      for (const url of urls) {
-        imageStorageService.createItem({ generationId: generation.id, url });
-      }
+      // Build per-slot results: persist successful URLs and capture error messages.
+      const slots: SlotResult[] = settled.map((result) => {
+        if (result.status === "fulfilled") {
+          const url = result.value[0];
+          const item = imageStorageService.createItem({ generationId: generation.id, url });
+          return { kind: "item", item } as SlotResult;
+        } else {
+          const message =
+            result.reason instanceof Error
+              ? result.reason.message
+              : "Generation failed";
+          return { kind: "error", message } as SlotResult;
+        }
+      });
+
+      const successCount = slots.filter((s) => s.kind === "item").length;
+      const errorCount = slots.filter((s) => s.kind === "error").length;
 
       log({
         category: "llm:response",
         action: "image:generate:complete",
-        data: { sessionId: id, generationId: generation.id, count: urls.length },
+        data: { sessionId: id, generationId: generation.id, successCount, errorCount },
       });
 
-      // Reload session data from storage so the UI reflects the new generation.
+      // Reload session data from storage so thumbnails and future steps reflect
+      // the newly stored items.
       const updated = loadSession(id);
       if (isMounted.current) {
         setData(updated);
+        // Show per-slot results (including any error cards) in the main pane.
+        setSlotResults(slots);
       }
     } catch (err) {
+      // Unexpected error (e.g. storage failure) — log it; the UI will show the
+      // previous state since slotResults remains undefined.
       const errMsg = err instanceof Error ? err.message : "Generation failed";
       log({
         category: "llm:response",
@@ -513,7 +616,7 @@ export default function SessionView() {
             aria-label="Generated images"
             data-testid="main-pane"
           >
-            <MainPane generations={data.generations} items={data.items} skeletonCount={skeletonCount} />
+            <MainPane generations={data.generations} items={data.items} skeletonCount={skeletonCount} slotResults={slotResults} />
           </main>
 
           {/* ── Thumbnail panel (desktop right panel) ──────────────────── */}
