@@ -21,6 +21,15 @@
   --color-input: hsl(214.3 31.8% 91.4%);
   --color-ring: hsl(222.2 84% 4.9%);
   --radius: 0.5rem;
+  /* Tag/pill palette — limited intentional set */
+  --color-tag-1-bg: hsl(210 60% 92%);
+  --color-tag-1-fg: hsl(222 60% 25%);
+  --color-tag-2-bg: hsl(260 50% 92%);
+  --color-tag-2-fg: hsl(260 50% 28%);
+  --color-tag-3-bg: hsl(140 45% 90%);
+  --color-tag-3-fg: hsl(140 50% 22%);
+  --color-tag-4-bg: hsl(30 70% 91%);
+  --color-tag-4-fg: hsl(30 65% 28%);
 }
 
 @layer base {
@@ -30,5 +39,67 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-size: 0.9375rem;
+    line-height: 1.6;
   }
+
+  /* ── Heading scale ───────────────────────────────────────────────────── */
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+  }
+  h2 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  /* ── Global focus ring ───────────────────────────────────────────────── */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ── Transition defaults ─────────────────────────────────────────────── */
+  a,
+  button,
+  [role="button"],
+  input,
+  textarea,
+  select {
+    transition-property: color, background-color, border-color, opacity, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+  }
+}
+
+/* ── Style pill colour cycling ───────────────────────────────────────────── */
+[data-tag-color="1"] { background-color: var(--color-tag-1-bg); color: var(--color-tag-1-fg); }
+[data-tag-color="2"] { background-color: var(--color-tag-2-bg); color: var(--color-tag-2-fg); }
+[data-tag-color="3"] { background-color: var(--color-tag-3-bg); color: var(--color-tag-3-fg); }
+[data-tag-color="4"] { background-color: var(--color-tag-4-bg); color: var(--color-tag-4-fg); }
+
+/* ── Audio player chrome reduction ──────────────────────────────────────── */
+audio.song-audio {
+  display: block;
+  width: 100%;
+  height: 36px;
+  border-radius: var(--radius);
+  background-color: var(--color-muted);
+  border: 1px solid var(--color-border);
+}
+audio.song-audio:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
 }

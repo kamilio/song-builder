@@ -32,6 +32,14 @@ function formatDate(isoString: string): string {
   });
 }
 
+function styleTagColor(style: string): "1" | "2" | "3" | "4" {
+  let hash = 0;
+  for (let i = 0; i < style.length; i++) {
+    hash = (hash * 31 + style.charCodeAt(i)) >>> 0;
+  }
+  return (String((hash % 4) + 1) as "1" | "2" | "3" | "4");
+}
+
 export default function LyricsList() {
   const navigate = useNavigate();
 
@@ -90,7 +98,7 @@ export default function LyricsList() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Lyrics List</h1>
+        <h1>Lyrics List</h1>
         <Button onClick={handleNewLyrics}>
           <Plus className="h-4 w-4 mr-2" />
           New Lyrics
@@ -147,7 +155,7 @@ export default function LyricsList() {
                 <tr
                   key={entry.id}
                   onClick={() => handleRowClick(entry.id)}
-                  className={`cursor-pointer hover:bg-accent transition-colors ${
+                  className={`cursor-pointer hover:bg-muted/50 active:bg-muted/70 focus-within:bg-muted/30 transition-colors ${
                     idx !== 0 ? "border-t" : ""
                   }`}
                 >
@@ -159,8 +167,17 @@ export default function LyricsList() {
                     )}
                   </td>
                   {/* Style column hidden on mobile (<768px) */}
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                    {entry.style || <span className="italic">—</span>}
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {entry.style ? (
+                      <span
+                        className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+                        data-tag-color={styleTagColor(entry.style)}
+                      >
+                        {entry.style}
+                      </span>
+                    ) : (
+                      <span className="italic text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td
                     className="px-4 py-3 text-muted-foreground"

@@ -7,6 +7,9 @@
  *
  * Clicking the card body navigates to /lyrics/:messageId.
  * "Songs" button navigates to /lyrics/:messageId/songs.
+ *
+ * Style pills use a colour derived from a stable hash of the style string so
+ * the same genre always renders the same colour (cycles through 4 hues).
  */
 
 import { useState } from "react";
@@ -15,6 +18,18 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { getSongsByMessage } from "@/lib/storage/storageService";
 import type { Message } from "@/lib/storage/types";
+
+/**
+ * Returns a tag colour index 1–4 derived from the style string.
+ * Same input always yields the same colour; different genres get distinct hues.
+ */
+function styleTagColor(style: string): "1" | "2" | "3" | "4" {
+  let hash = 0;
+  for (let i = 0; i < style.length; i++) {
+    hash = (hash * 31 + style.charCodeAt(i)) >>> 0;
+  }
+  return (String((hash % 4) + 1) as "1" | "2" | "3" | "4");
+}
 
 interface LyricsItemCardProps {
   message: Message;
@@ -54,9 +69,11 @@ export function LyricsItemCard({ message }: LyricsItemCardProps) {
     setExpanded((v) => !v);
   }
 
+  const tagColor = message.style ? styleTagColor(message.style) : undefined;
+
   return (
     <div
-      className="rounded-md border bg-card text-card-foreground shadow-sm cursor-pointer hover:bg-muted/50 transition-colors"
+      className="rounded-md border bg-card text-card-foreground shadow-sm cursor-pointer hover:bg-muted/40 active:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none transition-colors"
       onClick={handleCardClick}
       role="button"
       tabIndex={0}
@@ -69,17 +86,18 @@ export function LyricsItemCard({ message }: LyricsItemCardProps) {
       aria-label={`View lyrics: ${message.title ?? "Untitled"}`}
       data-testid="lyrics-item-card"
     >
-      {/* Card header: title + style tag */}
+      {/* Card header: title + style pill */}
       <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-2">
         <h3
-          className="text-sm font-semibold leading-snug"
+          className="font-semibold leading-snug"
           data-testid="card-title"
         >
           {message.title ?? "Untitled"}
         </h3>
         {message.style && (
           <span
-            className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+            className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
+            data-tag-color={tagColor}
             data-testid="card-style"
           >
             {message.style}
@@ -108,7 +126,7 @@ export function LyricsItemCard({ message }: LyricsItemCardProps) {
           </pre>
           {isCollapsible && (
             <button
-              className="mt-1 text-xs text-primary underline-offset-2 hover:underline"
+              className="mt-1 text-xs text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               onClick={handleExpandToggle}
               data-testid="card-expand-toggle"
               aria-label={expanded ? "Show less lyrics" : "Show more lyrics"}

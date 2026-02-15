@@ -86,7 +86,7 @@ export default function Settings() {
 
   return (
     <div className="p-8 max-w-lg">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1>Settings</h1>
       <p className="text-muted-foreground mt-2">Configure your API key and preferences.</p>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">

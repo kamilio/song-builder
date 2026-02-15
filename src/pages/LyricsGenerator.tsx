@@ -674,7 +674,7 @@ export default function LyricsGenerator() {
       {/* ── US-007: "Viewing earlier version" banner ─────────────────────── */}
       {latestLeafId && (
         <div
-          className="flex items-center justify-center gap-2 bg-muted/70 border-b px-4 py-2 text-sm text-muted-foreground shrink-0"
+          className="flex items-center justify-center gap-2 bg-secondary/60 border-b border-border px-4 py-1.5 text-xs text-muted-foreground shrink-0"
           data-testid="checkpoint-banner"
           role="status"
           aria-live="polite"
@@ -683,7 +683,7 @@ export default function LyricsGenerator() {
           <span aria-hidden="true">·</span>
           <button
             type="button"
-            className="font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded"
+            className="font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
             onClick={() => navigate(`/lyrics/${latestLeafId}`)}
             data-testid="return-to-latest-btn"
           >

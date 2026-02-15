@@ -91,7 +91,7 @@ export default function PinnedSongs() {
 
   return (
     <div className="p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold">Pinned Songs</h1>
+      <h1>Pinned Songs</h1>
       <p className="text-muted-foreground mt-2">
         Your pinned songs, ready to play or download.
       </p>
@@ -182,7 +182,7 @@ function PinnedSongItem({
       <audio
         controls
         src={song.audioUrl}
-        className="w-full"
+        className="song-audio"
         data-testid="pinned-song-audio"
       />
     </div>
