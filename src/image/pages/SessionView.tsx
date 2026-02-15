@@ -1,5 +1,5 @@
 /**
- * SessionView page (US-014, US-015, US-016, US-017, US-018)
+ * SessionView page (US-014, US-015, US-016, US-017, US-018, US-021)
  *
  * Route: /image/sessions/:id
  *
@@ -39,6 +39,13 @@
  * US-020: Clicking Generate with no poeApiKey shows ApiKeyMissingModal.
  * No generateImage call is made when the modal is shown. The modal contains
  * a link to /settings. Dismissing the modal does not navigate away.
+ *
+ * US-021: While a generation is in-flight, N skeleton placeholder cards are
+ * shown in the main pane (N = numImages from settings). Skeletons have the
+ * same aspect ratio as real image cards (square, matching the 320px max-width
+ * with a 1:1 ratio). No new thumbnails appear in the panel until the
+ * generation step completes. Skeletons are replaced by real images when
+ * generation finishes.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -239,18 +246,56 @@ function ThumbnailStrip({ generations, items }: ThumbnailPanelProps) {
   );
 }
 
+// ─── SkeletonCard ──────────────────────────────────────────────────────────
+
+/**
+ * A placeholder card shown while a generation is in-flight (US-021).
+ * Matches the aspect ratio and size of real image cards (square, 320px).
+ */
+function SkeletonCard() {
+  return (
+    <div
+      className="rounded-lg overflow-hidden border bg-card shadow-sm animate-pulse"
+      data-testid="skeleton-card"
+      aria-hidden="true"
+    >
+      <div
+        className="bg-muted"
+        style={{ width: "320px", height: "320px" }}
+      />
+    </div>
+  );
+}
+
 // ─── MainPane ──────────────────────────────────────────────────────────────
 
 interface MainPaneProps {
   generations: ImageGeneration[];
   items: ImageItem[];
+  /** When set, show N skeleton cards instead of the real latest images (US-021). */
+  skeletonCount?: number;
 }
 
 /**
  * Renders images from the generation with the highest stepId.
+ * Shows skeleton cards while generation is in-flight (US-021).
  * Shows an empty state when no generations exist.
  */
-function MainPane({ generations, items }: MainPaneProps) {
+function MainPane({ generations, items, skeletonCount }: MainPaneProps) {
+  // While generation is in-flight, show skeleton placeholders (US-021).
+  if (skeletonCount !== undefined && skeletonCount > 0) {
+    return (
+      <div
+        className="flex flex-wrap gap-4 content-start"
+        data-testid="main-pane-skeletons"
+      >
+        {Array.from({ length: skeletonCount }, (_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </div>
+    );
+  }
+
   if (generations.length === 0) {
     return (
       <div
@@ -351,6 +396,10 @@ export default function SessionView() {
   // True while a generateImage call is in-flight (disables Generate button).
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // Number of skeleton cards to show in the main pane while generation is
+  // in-flight (US-021). Set to numImages at generation start, cleared on finish.
+  const [skeletonCount, setSkeletonCount] = useState<number | undefined>(undefined);
+
   // API key guard (US-020): shows ApiKeyMissingModal when poeApiKey is absent.
   const { isModalOpen: isApiKeyModalOpen, guardAction, closeModal: closeApiKeyModal } = useApiKeyGuard();
 
@@ -385,6 +434,9 @@ export default function SessionView() {
       const musicSettings = getSettings();
       const imageSettings = imageStorageService.getImageSettings();
       const numImages = imageSettings?.numImages ?? 3;
+
+      // Show skeleton cards in the main pane while generation is in-flight (US-021).
+      setSkeletonCount(numImages);
 
       const client = createLLMClient(musicSettings?.poeApiKey ?? undefined);
 
@@ -424,6 +476,8 @@ export default function SessionView() {
       });
     } finally {
       if (isMounted.current) {
+        // Clear skeletons now that generation has finished (success or error).
+        setSkeletonCount(undefined);
         setIsGenerating(false);
       }
     }
@@ -459,7 +513,7 @@ export default function SessionView() {
             aria-label="Generated images"
             data-testid="main-pane"
           >
-            <MainPane generations={data.generations} items={data.items} />
+            <MainPane generations={data.generations} items={data.items} skeletonCount={skeletonCount} />
           </main>
 
           {/* ── Thumbnail panel (desktop right panel) ──────────────────── */}
