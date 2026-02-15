@@ -1,5 +1,5 @@
 /**
- * LyricsGenerator page (US-004 / US-009 / US-010).
+ * LyricsGenerator page (US-004 / US-005 / US-009 / US-010).
  *
  * Route: /lyrics/:messageId
  *
@@ -8,6 +8,11 @@
  * Submitting a message: createMessage (user, parentId = current messageId),
  * call llmClient.chat() with the ancestor path as history, createMessage
  * (assistant), navigate to /lyrics/:newAssistantId.
+ *
+ * US-005: Inline-editable fields in the left panel.
+ * Each field (title, style, commentary, duration, lyricsBody) can be clicked
+ * to activate an inline editor. Saves on blur or Enter (Shift+Enter for
+ * multiline fields). Pencil icon visible on hover.
  *
  * Layout:
  *   Desktop (≥ 768px): side-by-side split panels (lyrics left, chat right).
@@ -22,6 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiKeyMissingModal } from "@/components/ApiKeyMissingModal";
 import { useApiKeyGuard } from "@/hooks/useApiKeyGuard";
@@ -30,6 +36,7 @@ import {
   getMessage,
   getAncestors,
   getSettings,
+  updateMessage,
 } from "@/lib/storage/storageService";
 import type { Message } from "@/lib/storage/types";
 import { createLLMClient } from "@/lib/llm/factory";
@@ -100,6 +107,145 @@ function formatDuration(seconds: number): string {
 }
 
 /**
+ * InlineField: displays a value with a pencil-icon-on-hover affordance.
+ * Clicking activates an inline editor. Saves on blur or Enter (for single-line),
+ * or blur only (for textarea). Calls onSave with the new string value.
+ *
+ * Props:
+ *   value        — current display value (string)
+ *   onSave       — called with the trimmed new value when saving
+ *   renderDisplay — render the read-only display node
+ *   multiline    — if true, renders a <textarea>; otherwise an <input>
+ *   inputType    — HTML input type, defaults to "text"
+ *   testId       — data-testid prefix; display gets "{testId}", input gets "{testId}-input"
+ *   placeholder  — placeholder text for the editor
+ *   ariaLabel    — accessible label for the editor
+ */
+interface InlineFieldProps {
+  value: string;
+  onSave: (newValue: string) => void;
+  renderDisplay: () => React.ReactNode;
+  multiline?: boolean;
+  inputType?: string;
+  testId: string;
+  placeholder?: string;
+  ariaLabel: string;
+}
+
+function InlineField({
+  value,
+  onSave,
+  renderDisplay,
+  multiline = false,
+  inputType = "text",
+  testId,
+  placeholder,
+  ariaLabel,
+}: InlineFieldProps) {
+  const [editing, setEditing] = useState(false);
+  // draft is only used while editing; always initialized from `value` on startEdit.
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function startEdit() {
+    setDraft(value);
+    setEditing(true);
+  }
+
+  function commitSave() {
+    const trimmed = draft.trim();
+    setEditing(false);
+    if (trimmed !== value) {
+      onSave(trimmed);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && !multiline) {
+      e.preventDefault();
+      commitSave();
+    }
+    if (e.key === "Escape") {
+      setEditing(false);
+      setDraft(value);
+    }
+  }
+
+  // Focus the input when entering edit mode.
+  useEffect(() => {
+    if (editing) {
+      const el = multiline ? textareaRef.current : inputRef.current;
+      if (el) {
+        el.focus();
+        // setSelectionRange is not supported on number inputs; guard accordingly.
+        try {
+          const len = el.value.length;
+          el.setSelectionRange(len, len);
+        } catch {
+          // noop — input type doesn't support selection (e.g. type="number")
+        }
+      }
+    }
+  }, [editing, multiline]);
+
+  const sharedEditProps = {
+    value: draft,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setDraft(e.target.value),
+    onBlur: commitSave,
+    onKeyDown: handleKeyDown,
+    placeholder,
+    "aria-label": ariaLabel,
+    "data-testid": `${testId}-input`,
+    className:
+      "w-full bg-background border border-ring rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring",
+  };
+
+  if (editing) {
+    return multiline ? (
+      <textarea
+        ref={textareaRef}
+        {...(sharedEditProps as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
+        rows={4}
+        className={`${sharedEditProps.className} resize-none`}
+      />
+    ) : (
+      <input
+        ref={inputRef}
+        {...(sharedEditProps as React.InputHTMLAttributes<HTMLInputElement>)}
+        type={inputType}
+      />
+    );
+  }
+
+  return (
+    <span
+      className="group relative inline-flex items-center gap-1 cursor-pointer rounded hover:bg-muted/60 px-1 -mx-1 transition-colors"
+      onClick={startEdit}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          startEdit();
+        }
+      }}
+      aria-label={`Edit ${ariaLabel}`}
+      data-testid={`${testId}-editable`}
+    >
+      {renderDisplay()}
+      <Pencil
+        className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0"
+        size={12}
+        aria-hidden="true"
+        data-testid={`${testId}-pencil`}
+      />
+    </span>
+  );
+}
+
+/**
  * Returns true when window.innerWidth < 768px.
  * Re-evaluates on every resize so the layout switches live.
  */
@@ -153,6 +299,35 @@ export default function LyricsGenerator() {
   const latestAssistant = [...ancestorPath].reverse().find(
     (m) => m.role === "assistant"
   ) ?? null;
+
+  /**
+   * Save an inline-edited field back to storage and refresh the left panel.
+   * fieldKey is one of the editable Message keys; newValue is always a string
+   * from the input. Duration is converted back to an integer number of seconds.
+   */
+  const handleFieldSave = useCallback(
+    (
+      fieldKey: "title" | "style" | "commentary" | "lyricsBody" | "duration"
+    ) =>
+      (newValue: string) => {
+        if (!latestAssistant) return;
+        const updateData: Partial<
+          Pick<
+            Message,
+            "title" | "style" | "commentary" | "lyricsBody" | "duration"
+          >
+        > = {};
+        if (fieldKey === "duration") {
+          const parsed = parseInt(newValue, 10);
+          updateData.duration = Number.isFinite(parsed) ? parsed : 0;
+        } else {
+          updateData[fieldKey] = newValue;
+        }
+        updateMessage(latestAssistant.id, updateData);
+        setRefreshCount((c) => c + 1);
+      },
+    [latestAssistant]
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -218,7 +393,7 @@ export default function LyricsGenerator() {
     navigate(`/lyrics/${id}/songs`);
   }
 
-  /** Left panel: frontmatter + lyrics body. */
+  /** Left panel: frontmatter + lyrics body (all fields inline-editable). */
   const LyricsPanel = (
     <section
       className="flex flex-col overflow-auto p-6 flex-1 min-h-0"
@@ -235,32 +410,90 @@ export default function LyricsGenerator() {
           >
             <p>
               <span className="text-muted-foreground">title:</span>{" "}
-              <span data-testid="lyrics-title">{latestAssistant.title}</span>
+              <InlineField
+                value={latestAssistant.title ?? ""}
+                onSave={handleFieldSave("title")}
+                testId="lyrics-title"
+                ariaLabel="title"
+                placeholder="Song title"
+                renderDisplay={() => (
+                  <span data-testid="lyrics-title">
+                    {latestAssistant.title}
+                  </span>
+                )}
+              />
             </p>
             <p>
               <span className="text-muted-foreground">style:</span>{" "}
-              <span data-testid="lyrics-style">{latestAssistant.style}</span>
+              <InlineField
+                value={latestAssistant.style ?? ""}
+                onSave={handleFieldSave("style")}
+                testId="lyrics-style"
+                ariaLabel="style"
+                placeholder="Genre / mood / instrumentation"
+                renderDisplay={() => (
+                  <span data-testid="lyrics-style">
+                    {latestAssistant.style}
+                  </span>
+                )}
+              />
             </p>
             <p>
               <span className="text-muted-foreground">commentary:</span>{" "}
-              <span data-testid="lyrics-commentary">{latestAssistant.commentary}</span>
+              <InlineField
+                value={latestAssistant.commentary ?? ""}
+                onSave={handleFieldSave("commentary")}
+                testId="lyrics-commentary"
+                ariaLabel="commentary"
+                placeholder="Brief note about the creative choices"
+                multiline
+                renderDisplay={() => (
+                  <span data-testid="lyrics-commentary">
+                    {latestAssistant.commentary}
+                  </span>
+                )}
+              />
             </p>
-            {latestAssistant.duration !== undefined && (
-              <p>
-                <span className="text-muted-foreground">duration:</span>{" "}
-                <span data-testid="lyrics-duration">
-                  {formatDuration(latestAssistant.duration)}
-                </span>
-              </p>
-            )}
+            <p>
+              <span className="text-muted-foreground">duration:</span>{" "}
+              <InlineField
+                value={
+                  latestAssistant.duration !== undefined
+                    ? String(latestAssistant.duration)
+                    : ""
+                }
+                onSave={handleFieldSave("duration")}
+                testId="lyrics-duration"
+                ariaLabel="duration in seconds"
+                placeholder="seconds"
+                inputType="number"
+                renderDisplay={() => (
+                  <span data-testid="lyrics-duration">
+                    {latestAssistant.duration !== undefined
+                      ? formatDuration(latestAssistant.duration)
+                      : "—"}
+                  </span>
+                )}
+              />
+            </p>
           </div>
-          {/* Lyrics body */}
-          <pre
-            className="font-mono text-sm whitespace-pre-wrap flex-1"
-            data-testid="lyrics-body"
-          >
-            {latestAssistant.lyricsBody}
-          </pre>
+          {/* Lyrics body — inline-editable textarea */}
+          <InlineField
+            value={latestAssistant.lyricsBody ?? ""}
+            onSave={handleFieldSave("lyricsBody")}
+            testId="lyrics-body"
+            ariaLabel="lyrics body"
+            placeholder="Lyrics…"
+            multiline
+            renderDisplay={() => (
+              <pre
+                className="font-mono text-sm whitespace-pre-wrap flex-1"
+                data-testid="lyrics-body"
+              >
+                {latestAssistant.lyricsBody}
+              </pre>
+            )}
+          />
         </>
       ) : (
         <p className="text-muted-foreground text-sm" data-testid="lyrics-empty">
