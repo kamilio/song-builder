@@ -1,5 +1,5 @@
-import { ReactNode } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ReactNode, useEffect } from "react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Music } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Breadcrumb } from "@/components/Breadcrumb";
@@ -10,6 +10,23 @@ import LyricsGenerator from "@/pages/LyricsGenerator";
 import SongGenerator from "@/pages/SongGenerator";
 import PinnedSongs from "@/pages/PinnedSongs";
 import Settings from "@/pages/Settings";
+import { log } from "@/lib/actionLog";
+
+/**
+ * Logs every route change to the in-memory action log.
+ * Must be rendered inside BrowserRouter so useLocation is available.
+ */
+function RouteLogger() {
+  const location = useLocation();
+  useEffect(() => {
+    log({
+      category: "navigation",
+      action: "navigate",
+      data: { path: location.pathname, search: location.search },
+    });
+  }, [location.pathname, location.search]);
+  return null;
+}
 
 /**
  * Top bar shown on every page except Home.
@@ -61,6 +78,7 @@ function PageLayout({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <RouteLogger />
       <Routes>
         {/* Home — no top bar */}
         <Route path="/" element={<Home />} />

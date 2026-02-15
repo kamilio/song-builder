@@ -16,6 +16,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { getSongs, getMessages, pinSong } from "@/lib/storage/storageService";
 import type { Song } from "@/lib/storage/types";
+import { log } from "@/lib/actionLog";
 
 export default function PinnedSongs() {
   // Load all songs and messages once on mount; unpinning updates local state.
@@ -46,6 +47,11 @@ export default function PinnedSongs() {
   /** Unpin a song: update storage and remove it from the view immediately. */
   const handleUnpin = useCallback((song: Song) => {
     pinSong(song.id, false);
+    log({
+      category: "user:action",
+      action: "song:unpin",
+      data: { songId: song.id },
+    });
     setUnpinnedIds((prev) => new Set([...prev, song.id]));
   }, []);
 
@@ -55,6 +61,11 @@ export default function PinnedSongs() {
    * when the audio is served from a cross-origin CDN.
    */
   const handleDownload = useCallback(async (song: Song) => {
+    log({
+      category: "user:action",
+      action: "song:download",
+      data: { songId: song.id },
+    });
     try {
       const response = await fetch(song.audioUrl);
       const blob = await response.blob();

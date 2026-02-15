@@ -49,6 +49,7 @@ import {
 import type { Message } from "@/lib/storage/types";
 import { createLLMClient } from "@/lib/llm/factory";
 import type { ChatMessage as LLMChatMessage } from "@/lib/llm/types";
+import { log } from "@/lib/actionLog";
 
 const LYRICS_SYSTEM_PROMPT = `You are a professional songwriter and lyricist. \
 Help the user write and refine song lyrics.
@@ -346,6 +347,11 @@ export default function LyricsGenerator() {
           updateData[fieldKey] = newValue;
         }
         updateMessage(latestAssistant.id, updateData);
+        log({
+          category: "user:action",
+          action: "inline:edit",
+          data: { messageId: latestAssistant.id, field: fieldKey },
+        });
         setRefreshCount((c) => c + 1);
       },
     [latestAssistant]
@@ -372,6 +378,12 @@ export default function LyricsGenerator() {
         parentId,
       });
 
+      log({
+        category: "user:action",
+        action: "chat:submit",
+        data: { messageId: userMsg.id, parentId },
+      });
+
       setUserInput("");
 
       try {
@@ -387,6 +399,13 @@ export default function LyricsGenerator() {
 
         const settings = getSettings();
         const client = createLLMClient(settings?.poeApiKey ?? undefined);
+
+        log({
+          category: "llm:request",
+          action: "llm:chat:start",
+          data: { userMessageId: userMsg.id, historyLength: history.length },
+        });
+
         const responseText = await client.chat(history);
 
         const parsed = parseLyricsResponse(responseText);
@@ -397,9 +416,27 @@ export default function LyricsGenerator() {
           ...(parsed ?? {}),
         });
 
+        log({
+          category: "llm:response",
+          action: "llm:chat:complete",
+          data: {
+            userMessageId: userMsg.id,
+            assistantMessageId: assistantMsg.id,
+            parsed: parsed !== null,
+          },
+        });
+
         // Navigate to the new assistant message.
         navigate(`/lyrics/${assistantMsg.id}`, { replace: !id });
-      } catch {
+      } catch (err) {
+        log({
+          category: "llm:response",
+          action: "llm:chat:error",
+          data: {
+            userMessageId: userMsg.id,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
         // On error, still navigate to the user message so the state is saved.
         navigate(`/lyrics/${userMsg.id}`, { replace: !id });
       } finally {
@@ -412,6 +449,11 @@ export default function LyricsGenerator() {
 
   function handleGenerateSongs() {
     if (!id) return;
+    log({
+      category: "user:action",
+      action: "song:generate:navigate",
+      data: { messageId: id },
+    });
     navigate(`/lyrics/${id}/songs`);
   }
 

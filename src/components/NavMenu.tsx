@@ -5,7 +5,8 @@
  *   - All Lyrics    → /lyrics
  *   - Pinned Songs  → /pinned
  *   - Settings      → /settings
- *   - Report Bug    → stub (no-op toast, implemented fully in US-011)
+ *   - Report Bug    → copies the in-memory action log as JSON to the clipboard
+ *                     and shows a "Log copied" toast (US-011)
  *
  * The dropdown closes on outside click, on item click, and on Escape.
  */
@@ -14,6 +15,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu, List, Pin, Settings, Bug } from "lucide-react";
+import { getAll, log } from "@/lib/actionLog";
 
 interface MenuItem {
   label: string;
@@ -26,10 +28,23 @@ interface MenuItem {
 export function NavMenu() {
   const [open, setOpen] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
-  function handleReportBug() {
+  async function handleReportBug() {
     setOpen(false);
+    log({
+      category: "user:action",
+      action: "report:bug",
+      data: {},
+    });
+    try {
+      const entries = getAll();
+      await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
+      setToastMessage("Log copied");
+    } catch {
+      setToastMessage("Copy failed — clipboard unavailable");
+    }
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2500);
   }
@@ -145,7 +160,7 @@ export function NavMenu() {
         </div>
       )}
 
-      {/* Report Bug stub toast */}
+      {/* Report Bug toast */}
       {toastVisible && (
         <div
           role="status"
@@ -153,7 +168,7 @@ export function NavMenu() {
           data-testid="report-bug-toast"
           className="fixed bottom-4 right-4 z-50 rounded-md border bg-background px-4 py-2 text-sm shadow-lg"
         >
-          Bug reporting coming soon.
+          {toastMessage}
         </div>
       )}
     </div>

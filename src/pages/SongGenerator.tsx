@@ -36,6 +36,7 @@ import {
 } from "@/lib/storage/storageService";
 import type { Message, Song } from "@/lib/storage/types";
 import { createLLMClient } from "@/lib/llm/factory";
+import { log } from "@/lib/actionLog";
 
 /** Build the style prompt sent to ElevenLabs from a message's lyrics fields. */
 function buildStylePrompt(message: Message): string {
@@ -128,10 +129,21 @@ export default function SongGenerator() {
     setSlots(initialSlots);
     setIsGenerating(true);
 
+    log({
+      category: "user:action",
+      action: "song:generate:start",
+      data: { messageId, numSongs: n },
+    });
+
     const client = createLLMClient(settings?.poeApiKey ?? undefined);
 
     // Launch N concurrent generation requests.
     const promises = slotIds.map(async (slotId, i) => {
+      log({
+        category: "llm:request",
+        action: "llm:song:start",
+        data: { messageId, slotId, slotIndex: i },
+      });
       try {
         const audioUrl = await client.generateSong(prompt, musicLengthMs);
         const songNumber = i + 1;
@@ -139,6 +151,12 @@ export default function SongGenerator() {
           messageId,
           title: `${message.title || "Song"} (Take ${songNumber})`,
           audioUrl,
+        });
+
+        log({
+          category: "llm:response",
+          action: "llm:song:complete",
+          data: { messageId, slotId, songId: song.id },
         });
 
         // Update only this slot's entry in the Map — siblings are unaffected.
@@ -151,6 +169,11 @@ export default function SongGenerator() {
       } catch (err) {
         const errMsg =
           err instanceof Error ? err.message : "Generation failed";
+        log({
+          category: "llm:response",
+          action: "llm:song:error",
+          data: { messageId, slotId, error: errMsg },
+        });
         setSlots((prev) => {
           const next = new Map(prev);
           next.set(slotId, { loading: false, song: null, error: errMsg });
@@ -169,6 +192,11 @@ export default function SongGenerator() {
   const handlePin = useCallback((song: Song) => {
     const newPinned = !song.pinned;
     pinSong(song.id, newPinned);
+    log({
+      category: "user:action",
+      action: newPinned ? "song:pin" : "song:unpin",
+      data: { songId: song.id },
+    });
     setSongOverrides((prev) => {
       const next = new Map(prev);
       next.set(song.id, { ...next.get(song.id), pinned: newPinned });
@@ -179,6 +207,11 @@ export default function SongGenerator() {
   /** Soft-delete a song; hides it from the list immediately. */
   const handleDelete = useCallback((song: Song) => {
     deleteSong(song.id);
+    log({
+      category: "user:action",
+      action: "song:delete",
+      data: { songId: song.id },
+    });
     setSongOverrides((prev) => {
       const next = new Map(prev);
       next.set(song.id, { ...next.get(song.id), deleted: true });
@@ -192,6 +225,11 @@ export default function SongGenerator() {
    * when the audio is served from a cross-origin CDN.
    */
   const handleDownload = useCallback(async (song: Song) => {
+    log({
+      category: "user:action",
+      action: "song:download",
+      data: { songId: song.id },
+    });
     try {
       const response = await fetch(song.audioUrl);
       const blob = await response.blob();
