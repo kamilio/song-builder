@@ -7,6 +7,7 @@ import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
 import SharedHome from "@/shared/components/SharedHome";
 import Home from "@/music/pages/Home";
+import ImageHome from "@/image/pages/Home";
 import LyricsList from "@/music/pages/LyricsList";
 import LyricsGenerator from "@/music/pages/LyricsGenerator";
 import SongGenerator from "@/music/pages/SongGenerator";
@@ -126,6 +127,9 @@ export default function App() {
 
         {/* Music — Home has no top bar */}
         <Route path="/music" element={<Home />} />
+
+        {/* Image — Home has no top bar */}
+        <Route path="/image" element={<ImageHome />} />
 
         {/* All other music pages — wrapped in PageLayout with TopBar */}
         <Route
