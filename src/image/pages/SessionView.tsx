@@ -56,11 +56,18 @@
  * Download button. Clicking it fetches the image as a blob and triggers a
  * browser file download. The filename includes the session title and image
  * index (1-based position in the current display list).
+ *
+ * US-024: Pin and unpin image action. Each image card in the main pane has a
+ * Pin toggle button. Clicking it sets ImageItem.pinned to true (or false if
+ * already pinned) via imageStorageService.updateItem, then reloads session
+ * data so thumbnails reflect the new state. The Pin button visually
+ * distinguishes pinned vs unpinned state. Thumbnail images also show a pin
+ * indicator when pinned.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ImageIcon, Pin, Settings, Bug, Download } from "lucide-react";
+import { ImageIcon, Pin, PinOff, Settings, Bug, Download } from "lucide-react";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
@@ -228,6 +235,7 @@ function groupItemsByStep(
 
 /** A single thumbnail image rendered at a small fixed size.
  *  Clicking opens the full image in a new browser tab (US-017).
+ *  Shows a pin indicator when the item is pinned (US-024).
  */
 function ThumbnailImage({ item }: { item: ImageItem }) {
   return (
@@ -237,14 +245,24 @@ function ThumbnailImage({ item }: { item: ImageItem }) {
       rel="noopener noreferrer"
       aria-label="View full image"
       data-testid="thumbnail-link"
+      className="relative block shrink-0"
+      style={{ width: 64, height: 64 }}
     >
       <img
         src={item.url}
         alt=""
-        className="block object-cover rounded"
-        style={{ width: 64, height: 64, flexShrink: 0 }}
+        className="block object-cover rounded w-full h-full"
         data-testid="thumbnail-image"
       />
+      {item.pinned && (
+        <span
+          className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5"
+          aria-label="Pinned"
+          data-testid="thumbnail-pin-indicator"
+        >
+          <Pin className="h-2.5 w-2.5 text-primary" aria-hidden="true" />
+        </span>
+      )}
     </a>
   );
 }
@@ -375,13 +393,18 @@ interface ImageCardProps {
   index: number;
   /** Session title used to build the download filename. */
   sessionTitle: string;
+  /** Called when the user toggles the pin state for this image (US-024). */
+  onPinToggle: (item: ImageItem) => void;
 }
 
 /**
- * A single image card with an overlaid Download button (US-023).
- * The button is always visible so users can easily discover it.
+ * A single image card with overlaid Download (US-023) and Pin toggle (US-024)
+ * buttons. Both buttons are always visible so users can easily discover them.
+ *
+ * The Pin button visually distinguishes pinned (filled icon + tinted background)
+ * from unpinned (outline icon) state.
  */
-function ImageCard({ item, index, sessionTitle }: ImageCardProps) {
+function ImageCard({ item, index, sessionTitle, onPinToggle }: ImageCardProps) {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDownload = useCallback(async () => {
@@ -405,7 +428,28 @@ function ImageCard({ item, index, sessionTitle }: ImageCardProps) {
         className="w-full h-auto block"
         style={{ maxWidth: "320px" }}
       />
-      <div className="absolute bottom-2 right-2">
+      <div className="absolute bottom-2 right-2 flex gap-1">
+        {/* Pin toggle button (US-024) */}
+        <button
+          type="button"
+          onClick={() => onPinToggle(item)}
+          aria-label={item.pinned ? "Unpin image" : "Pin image"}
+          aria-pressed={item.pinned}
+          data-testid="pin-btn"
+          className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium shadow transition-colors ${
+            item.pinned
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-background/80 hover:bg-background"
+          }`}
+        >
+          {item.pinned ? (
+            <PinOff className="h-3 w-3" aria-hidden="true" />
+          ) : (
+            <Pin className="h-3 w-3" aria-hidden="true" />
+          )}
+          {item.pinned ? "Unpin" : "Pin"}
+        </button>
+        {/* Download button (US-023) */}
         <button
           type="button"
           onClick={() => void handleDownload()}
@@ -438,6 +482,8 @@ interface MainPaneProps {
    * Cleared once new storage-backed items are loaded.
    */
   slotResults?: SlotResult[];
+  /** Called when the user clicks the Pin toggle on an image card (US-024). */
+  onPinToggle: (item: ImageItem) => void;
 }
 
 /**
@@ -446,7 +492,7 @@ interface MainPaneProps {
  * Shows per-slot error cards for failed slots (US-022).
  * Shows an empty state when no generations exist.
  */
-function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults }: MainPaneProps) {
+function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults, onPinToggle }: MainPaneProps) {
   // While generation is in-flight, show skeleton placeholders (US-021).
   if (skeletonCount !== undefined && skeletonCount > 0) {
     return (
@@ -477,6 +523,7 @@ function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults
               item={slot.item}
               index={i + 1}
               sessionTitle={sessionTitle}
+              onPinToggle={onPinToggle}
             />
           ) : (
             <ErrorCard key={`error-${i}`} message={slot.message} />
@@ -533,6 +580,7 @@ function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults
           item={item}
           index={i + 1}
           sessionTitle={sessionTitle}
+          onPinToggle={onPinToggle}
         />
       ))}
     </div>
@@ -595,6 +643,7 @@ export default function SessionView() {
   // Used to ignore stale setState calls if the component unmounts mid-flight.
   const isMounted = useRef(true);
   useEffect(() => {
+    isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
@@ -603,6 +652,30 @@ export default function SessionView() {
   const handleNewSession = useCallback(() => {
     navigate("/image");
   }, [navigate]);
+
+  /**
+   * Toggles the pinned state of an ImageItem (US-024).
+   * Persists the change via imageStorageService.updateItem, then reloads
+   * the session data so both the main pane and thumbnail panel reflect
+   * the updated state.
+   */
+  const handlePinToggle = useCallback((item: ImageItem) => {
+    imageStorageService.updateItem(item.id, { pinned: !item.pinned });
+    const updated = loadSession(id);
+    if (isMounted.current) {
+      setData(updated);
+      // Also update any slot results so the main pane reflects the new state
+      // while slotResults are still shown (e.g. immediately after generation).
+      setSlotResults((prev) => {
+        if (!prev) return prev;
+        return prev.map((slot) =>
+          slot.kind === "item" && slot.item.id === item.id
+            ? { kind: "item", item: { ...slot.item, pinned: !item.pinned } }
+            : slot
+        );
+      });
+    }
+  }, [id]);
 
   const handleGenerate = useCallback(async () => {
     if (isGenerating) return;
@@ -725,7 +798,7 @@ export default function SessionView() {
             aria-label="Generated images"
             data-testid="main-pane"
           >
-            <MainPane generations={data.generations} items={data.items} sessionTitle={data.session.title} skeletonCount={skeletonCount} slotResults={slotResults} />
+            <MainPane generations={data.generations} items={data.items} sessionTitle={data.session.title} skeletonCount={skeletonCount} slotResults={slotResults} onPinToggle={handlePinToggle} />
           </main>
 
           {/* ── Thumbnail panel (desktop right panel) ──────────────────── */}
