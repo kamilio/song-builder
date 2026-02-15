@@ -38,7 +38,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { ImageIcon, Pin, Settings, Bug } from "lucide-react";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
@@ -331,6 +331,7 @@ function latestPrompt(generations: ImageGeneration[]): string {
 
 export default function SessionView() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   // Initialise data from storage once on mount (id is stable for the lifetime of this view).
   const [data, setData] = useState<SessionData | null>(() => loadSession(id));
@@ -351,6 +352,10 @@ export default function SessionView() {
       isMounted.current = false;
     };
   }, []);
+
+  const handleNewSession = useCallback(() => {
+    navigate("/image");
+  }, [navigate]);
 
   const handleGenerate = useCallback(async () => {
     if (isGenerating) return;
@@ -484,14 +489,22 @@ export default function SessionView() {
                 }
               }}
             />
-            <Button
-              onClick={() => void handleGenerate()}
-              disabled={isGenerating || !prompt.trim()}
-              data-testid="generate-btn"
-              className="shrink-0"
-            >
-              {isGenerating ? "Generating…" : "Generate"}
-            </Button>
+            <div className="flex flex-col gap-2 shrink-0">
+              <Button
+                onClick={() => void handleGenerate()}
+                disabled={isGenerating || !prompt.trim()}
+                data-testid="generate-btn"
+              >
+                {isGenerating ? "Generating…" : "Generate"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleNewSession}
+                data-testid="new-session-btn"
+              >
+                New Session
+              </Button>
+            </div>
           </div>
         </div>
       </div>
