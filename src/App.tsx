@@ -9,6 +9,7 @@ import SharedHome from "@/shared/components/SharedHome";
 import Home from "@/music/pages/Home";
 import ImageHome from "@/image/pages/Home";
 import ImageSessionView from "@/image/pages/SessionView";
+import ImagePinnedImages from "@/image/pages/PinnedImages";
 import LyricsList from "@/music/pages/LyricsList";
 import LyricsGenerator from "@/music/pages/LyricsGenerator";
 import SongGenerator from "@/music/pages/SongGenerator";
@@ -134,6 +135,9 @@ export default function App() {
 
         {/* Image — Session view */}
         <Route path="/image/sessions/:id" element={<ImageSessionView />} />
+
+        {/* Image — Pinned images page */}
+        <Route path="/image/pinned" element={<ImagePinnedImages />} />
 
         {/* All other music pages — wrapped in PageLayout with TopBar */}
         <Route
