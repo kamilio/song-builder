@@ -1,5 +1,5 @@
 /**
- * SessionView page (US-014, US-015)
+ * SessionView page (US-014, US-015, US-016)
  *
  * Route: /image/sessions/:id
  *
@@ -21,6 +21,10 @@
  * stepId only, displayed in rows fitting the container width. Each image
  * renders as a card with an img element. Empty state shown when no
  * completed generations exist.
+ *
+ * US-016: Thumbnail panel (desktop right panel) and thumbnail strip (mobile)
+ * show all images across all generation steps, grouped by stepId descending
+ * (newest group first). Each thumbnail is a small fixed-size image.
  */
 
 import { Link, Navigate, useParams } from "react-router-dom";
@@ -85,6 +89,122 @@ function TopBar() {
 
       <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleImageReportBug} />
     </header>
+  );
+}
+
+// ─── Thumbnail helpers ─────────────────────────────────────────────────────
+
+interface ThumbnailGroup {
+  stepId: number;
+  items: ImageItem[];
+}
+
+/**
+ * Groups items by their generation's stepId, ordered by stepId descending
+ * (newest group first). Items within each group retain their original order.
+ */
+function groupItemsByStep(
+  generations: ImageGeneration[],
+  items: ImageItem[]
+): ThumbnailGroup[] {
+  // Map generationId -> stepId for quick lookup
+  const stepByGenId = new Map<string, number>(
+    generations.map((g) => [g.id, g.stepId])
+  );
+
+  // Collect non-deleted items grouped by stepId
+  const byStep = new Map<number, ImageItem[]>();
+  for (const item of items) {
+    if (item.deleted) continue;
+    const stepId = stepByGenId.get(item.generationId);
+    if (stepId === undefined) continue;
+    if (!byStep.has(stepId)) byStep.set(stepId, []);
+    byStep.get(stepId)!.push(item);
+  }
+
+  // Sort stepIds descending (newest first)
+  const sortedStepIds = Array.from(byStep.keys()).sort((a, b) => b - a);
+  return sortedStepIds.map((stepId) => ({ stepId, items: byStep.get(stepId)! }));
+}
+
+// ─── ThumbnailImage ────────────────────────────────────────────────────────
+
+/** A single thumbnail image rendered at a small fixed size. */
+function ThumbnailImage({ item }: { item: ImageItem }) {
+  return (
+    <img
+      src={item.url}
+      alt=""
+      className="block object-cover rounded"
+      style={{ width: 64, height: 64, flexShrink: 0 }}
+      data-testid="thumbnail-image"
+    />
+  );
+}
+
+// ─── ThumbnailPanel (desktop right panel) ──────────────────────────────────
+
+interface ThumbnailPanelProps {
+  generations: ImageGeneration[];
+  items: ImageItem[];
+}
+
+/**
+ * Desktop right panel: vertically scrollable list of all thumbnails grouped
+ * by stepId descending.
+ */
+function ThumbnailPanel({ generations, items }: ThumbnailPanelProps) {
+  const groups = groupItemsByStep(generations, items);
+
+  if (groups.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground text-center mt-2" data-testid="thumbnail-panel-empty">
+        No images yet.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      {groups.map((group) => (
+        <div key={group.stepId} className="mb-3" data-testid="thumbnail-group">
+          <p className="text-xs text-muted-foreground mb-1">Step {group.stepId}</p>
+          <div className="flex flex-col gap-1">
+            {group.items.map((item) => (
+              <ThumbnailImage key={item.id} item={item} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+// ─── ThumbnailStrip (mobile horizontal strip) ──────────────────────────────
+
+/**
+ * Mobile horizontal strip: all thumbnails across all steps rendered in a
+ * single horizontal row, ordered newest step first.
+ */
+function ThumbnailStrip({ generations, items }: ThumbnailPanelProps) {
+  const groups = groupItemsByStep(generations, items);
+
+  if (groups.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground whitespace-nowrap" data-testid="thumbnail-strip-empty">
+        No images yet.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      {groups.map((group) =>
+        group.items.map((item) => (
+          <ThumbnailImage key={item.id} item={item} />
+        ))
+      )}
+    </>
   );
 }
 
@@ -224,10 +344,7 @@ export default function SessionView() {
             aria-label="Image thumbnails"
             data-testid="thumbnail-panel"
           >
-            {/* Placeholder — content filled by US-016 */}
-            <p className="text-xs text-muted-foreground text-center mt-2" data-testid="thumbnail-panel-placeholder">
-              Thumbnails
-            </p>
+            <ThumbnailPanel generations={data.generations} items={data.items} />
           </aside>
         </div>
 
@@ -237,10 +354,7 @@ export default function SessionView() {
           aria-label="Image thumbnails"
           data-testid="thumbnail-strip"
         >
-          {/* Placeholder — content filled by US-016 */}
-          <p className="text-xs text-muted-foreground whitespace-nowrap" data-testid="thumbnail-strip-placeholder">
-            Thumbnails
-          </p>
+          <ThumbnailStrip generations={data.generations} items={data.items} />
         </div>
 
         {/* ── Bottom input bar ──────────────────────────────────────────── */}
