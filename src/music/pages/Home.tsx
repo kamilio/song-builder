@@ -1,10 +1,50 @@
 import { useState, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { List, Pin, Settings, Bug } from "lucide-react";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
 import { LyricsItemCard } from "@/music/components/LyricsItemCard";
 import { storageService } from "@/music/lib/storage";
-import { NavMenu } from "@/music/components/NavMenu";
+import { NavMenu } from "@/shared/components/NavMenu";
+import type { MenuItem } from "@/shared/components/NavMenu";
+import { log, getAll } from "@/music/lib/actionLog";
+
+const HOME_NAV_ITEMS: MenuItem[] = [
+  {
+    label: "All Lyrics",
+    href: "/music/lyrics",
+    icon: List,
+    "data-testid": "nav-menu-lyrics",
+  },
+  {
+    label: "Pinned Songs",
+    href: "/music/pinned",
+    icon: Pin,
+    "data-testid": "nav-menu-pinned",
+  },
+  {
+    label: "Settings",
+    href: "/music/settings",
+    icon: Settings,
+    "data-testid": "nav-menu-settings",
+  },
+  {
+    label: "Report Bug",
+    icon: Bug,
+    isReportBug: true,
+    "data-testid": "nav-menu-report-bug",
+  },
+];
+
+async function handleHomeReportBug() {
+  log({
+    category: "user:action",
+    action: "report:bug",
+    data: {},
+  });
+  const entries = getAll();
+  await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
+}
 
 const EXAMPLE_PROMPTS = [
   "A melancholy indie folk song about missing someone on a rainy day",
@@ -44,7 +84,7 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col items-center p-6 pt-20 pb-16 bg-gradient-to-b from-background to-secondary/30">
       <div className="fixed top-4 right-4 z-40">
-        <NavMenu />
+        <NavMenu items={HOME_NAV_ITEMS} onReportBug={handleHomeReportBug} />
       </div>
       {/* Logo + wordmark */}
       <div className="mb-10 flex flex-col items-center gap-3 text-center">

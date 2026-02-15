@@ -1,16 +1,17 @@
 import { ReactNode, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Music } from "lucide-react";
+import { Music, List, Pin, Settings as SettingsIcon, Bug } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Breadcrumb } from "@/music/components/Breadcrumb";
-import { NavMenu } from "@/music/components/NavMenu";
+import { NavMenu } from "@/shared/components/NavMenu";
+import type { MenuItem } from "@/shared/components/NavMenu";
 import Home from "@/music/pages/Home";
 import LyricsList from "@/music/pages/LyricsList";
 import LyricsGenerator from "@/music/pages/LyricsGenerator";
 import SongGenerator from "@/music/pages/SongGenerator";
 import PinnedSongs from "@/music/pages/PinnedSongs";
 import Settings from "@/music/pages/Settings";
-import { log } from "@/music/lib/actionLog";
+import { log, getAll } from "@/music/lib/actionLog";
 
 /**
  * Logs every route change to the in-memory action log.
@@ -26,6 +27,43 @@ function RouteLogger() {
     });
   }, [location.pathname, location.search]);
   return null;
+}
+
+const MUSIC_NAV_ITEMS: MenuItem[] = [
+  {
+    label: "All Lyrics",
+    href: "/music/lyrics",
+    icon: List,
+    "data-testid": "nav-menu-lyrics",
+  },
+  {
+    label: "Pinned Songs",
+    href: "/music/pinned",
+    icon: Pin,
+    "data-testid": "nav-menu-pinned",
+  },
+  {
+    label: "Settings",
+    href: "/music/settings",
+    icon: SettingsIcon,
+    "data-testid": "nav-menu-settings",
+  },
+  {
+    label: "Report Bug",
+    icon: Bug,
+    isReportBug: true,
+    "data-testid": "nav-menu-report-bug",
+  },
+];
+
+async function handleMusicReportBug() {
+  log({
+    category: "user:action",
+    action: "report:bug",
+    data: {},
+  });
+  const entries = getAll();
+  await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
 }
 
 /**
@@ -59,7 +97,7 @@ function TopBar() {
       </div>
 
       {/* Navigation menu */}
-      <NavMenu />
+      <NavMenu items={MUSIC_NAV_ITEMS} onReportBug={handleMusicReportBug} />
     </header>
   );
 }
