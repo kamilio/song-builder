@@ -7,3 +7,5 @@ dist/
 .agents/poe-code-ralph/
 test-results/
 playwright-report/
+.playwright-mcp/
+screenshots/

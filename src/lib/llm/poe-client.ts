@@ -46,7 +46,7 @@ export class PoeLLMClient implements LLMClient {
       model: "elevenlabs-music",
       messages: [{ role: "user", content: prompt }],
       // @ts-expect-error extra_body is a Poe-specific extension not in the OpenAI types
-      extra_body: { music_length_ms: 30000 },
+      extra_body: { music_length_ms: 150000 },
     });
 
     const audioUrl = response.choices[0]?.message?.content;
