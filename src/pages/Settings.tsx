@@ -87,60 +87,80 @@ export default function Settings() {
   return (
     <div className="p-4 md:p-8 max-w-lg">
       <h1>Settings</h1>
-      <p className="text-muted-foreground mt-2">Configure your API key and preferences.</p>
+      <p className="text-muted-foreground mt-1">Configure your API key and preferences.</p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        <div className="space-y-1">
-          <label htmlFor="apiKey" className="text-sm font-medium">
-            POE API Key
-          </label>
-          <input
-            id="apiKey"
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter your Poe API key"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
+      <form onSubmit={handleSubmit} className="mt-6">
+        <div className="rounded-lg border bg-card p-5 space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="apiKey" className="text-sm font-medium">
+              POE API Key
+            </label>
+            <input
+              id="apiKey"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter your Poe API key"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground">
+              Get your key at{" "}
+              <a
+                href="https://poe.com/api_key"
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                poe.com/api_key
+              </a>
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="numSongs" className="text-sm font-medium">
+              Songs to generate per request
+            </label>
+            <input
+              id="numSongs"
+              type="number"
+              min={1}
+              max={10}
+              value={numSongs}
+              onChange={(e) => setNumSongs(Number(e.target.value))}
+              className="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              Save Settings
+            </button>
+            {savedMessage && (
+              <p className="text-sm text-green-600">{savedMessage}</p>
+            )}
+          </div>
         </div>
-
-        <div className="space-y-1">
-          <label htmlFor="numSongs" className="text-sm font-medium">
-            Songs to generate
-          </label>
-          <input
-            id="numSongs"
-            type="number"
-            min={1}
-            max={10}
-            value={numSongs}
-            onChange={(e) => setNumSongs(Number(e.target.value))}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        </div>
-
-        <button
-          type="submit"
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          Save Settings
-        </button>
-
-        {savedMessage && (
-          <p className="text-sm text-green-600">{savedMessage}</p>
-        )}
       </form>
 
-      <div className="mt-8 space-y-4 border-t pt-6">
-        <h2 className="text-lg font-semibold">Danger Zone</h2>
-
-        <button
-          type="button"
-          onClick={() => setShowResetDialog(true)}
-          className="inline-flex items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground shadow hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          Reset Memory
-        </button>
+      <div className="mt-6">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 space-y-3">
+          <div>
+            <h2 className="text-base font-semibold text-destructive">Danger Zone</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Permanently delete all your lyrics, songs, and settings.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowResetDialog(true)}
+            className="inline-flex items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground shadow hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            Reset Memory
+          </button>
+        </div>
       </div>
 
       {showResetDialog && (
@@ -177,58 +197,65 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="mt-8 space-y-4 border-t pt-6">
-        <h2 className="text-lg font-semibold">Import / Export</h2>
+      <div className="mt-6">
+        <div className="rounded-lg border bg-card p-5 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold">Import / Export</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Back up or restore your lyrics and songs as JSON.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            id="includeApiKey"
-            type="checkbox"
-            checked={includeApiKey}
-            onChange={(e) => setIncludeApiKey(e.target.checked)}
-            className="h-4 w-4 rounded border-input"
-          />
-          <label htmlFor="includeApiKey" className="text-sm font-medium">
-            Include API keys in export
-          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="includeApiKey"
+              type="checkbox"
+              checked={includeApiKey}
+              onChange={(e) => setIncludeApiKey(e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            <label htmlFor="includeApiKey" className="text-sm">
+              Include API key in export
+            </label>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleExport}
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              Export Data
+            </button>
+
+            <button
+              type="button"
+              onClick={handleImportClick}
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              Import Data
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleFileChange}
+              className="hidden"
+              aria-label="Import JSON file"
+            />
+          </div>
+
+          {importError && (
+            <p
+              className="text-sm text-destructive"
+              data-testid="import-error"
+              role="alert"
+            >
+              {importError}
+            </p>
+          )}
         </div>
-
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={handleExport}
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            Export Data
-          </button>
-
-          <button
-            type="button"
-            onClick={handleImportClick}
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            Import Data
-          </button>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            onChange={handleFileChange}
-            className="hidden"
-            aria-label="Import JSON file"
-          />
-        </div>
-
-        {importError && (
-          <p
-            className="text-sm text-destructive"
-            data-testid="import-error"
-            role="alert"
-          >
-            {importError}
-          </p>
-        )}
       </div>
     </div>
   );

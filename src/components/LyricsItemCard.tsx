@@ -73,7 +73,7 @@ export function LyricsItemCard({ message }: LyricsItemCardProps) {
 
   return (
     <div
-      className="rounded-md border bg-card text-card-foreground shadow-sm cursor-pointer hover:bg-muted/40 active:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none transition-colors"
+      className="rounded-lg border bg-card text-card-foreground shadow-sm cursor-pointer hover:shadow-md hover:border-foreground/20 active:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none transition-all"
       onClick={handleCardClick}
       role="button"
       tabIndex={0}
@@ -87,46 +87,48 @@ export function LyricsItemCard({ message }: LyricsItemCardProps) {
       data-testid="lyrics-item-card"
     >
       {/* Card header: title + style pill */}
-      <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-2">
-        <h3
-          className="font-semibold leading-snug"
-          data-testid="card-title"
-        >
-          {message.title ?? "Untitled"}
-        </h3>
-        {message.style && (
-          <span
-            className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-            data-tag-color={tagColor}
-            data-testid="card-style"
+      <div className="px-4 pt-4 pb-2">
+        <div className="flex items-start justify-between gap-2 mb-1.5">
+          <h3
+            className="font-semibold leading-snug"
+            data-testid="card-title"
           >
-            {message.style}
-          </span>
+            {message.title ?? "Untitled"}
+          </h3>
+          {message.style && (
+            <span
+              className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium mt-0.5"
+              data-tag-color={tagColor}
+              data-testid="card-style"
+            >
+              {message.style}
+            </span>
+          )}
+        </div>
+
+        {/* Commentary */}
+        {message.commentary && (
+          <p
+            className="text-xs text-muted-foreground italic leading-relaxed"
+            data-testid="card-commentary"
+          >
+            {message.commentary}
+          </p>
         )}
       </div>
 
-      {/* Commentary */}
-      {message.commentary && (
-        <p
-          className="px-4 pb-2 text-xs italic text-muted-foreground"
-          data-testid="card-commentary"
-        >
-          {message.commentary}
-        </p>
-      )}
-
       {/* Collapsible lyrics body */}
       {lyricsLines.length > 0 && (
-        <div className="px-4 pb-2">
+        <div className="px-4 pb-3 border-t border-dashed border-border/60 pt-3 mx-4 -mx-0">
           <pre
-            className="font-mono text-xs text-muted-foreground whitespace-pre-wrap"
+            className="font-mono text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed"
             data-testid="card-lyrics-body"
           >
             {visibleLines.join("\n")}
           </pre>
           {isCollapsible && (
             <button
-              className="mt-1 text-xs text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              className="mt-2 text-xs text-primary/70 underline-offset-2 hover:underline hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded transition-colors"
               onClick={handleExpandToggle}
               data-testid="card-expand-toggle"
               aria-label={expanded ? "Show less lyrics" : "Show more lyrics"}
@@ -139,7 +141,7 @@ export function LyricsItemCard({ message }: LyricsItemCardProps) {
       )}
 
       {/* Footer: song count badge + Songs button */}
-      <div className="flex items-center justify-between px-4 pb-4 pt-1">
+      <div className="flex items-center justify-between px-4 pb-3 pt-2 border-t border-border/50">
         <span
           className="text-xs text-muted-foreground"
           data-testid="card-song-count"
@@ -153,6 +155,7 @@ export function LyricsItemCard({ message }: LyricsItemCardProps) {
           data-songs-btn="true"
           data-testid="card-songs-btn"
           aria-label={`Go to songs for ${message.title ?? "Untitled"}`}
+          className="h-7 text-xs px-2.5"
         >
           Songs
         </Button>

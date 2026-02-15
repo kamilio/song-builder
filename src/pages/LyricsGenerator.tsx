@@ -33,7 +33,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Pencil } from "lucide-react";
+import { Pencil, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiKeyMissingModal } from "@/components/ApiKeyMissingModal";
 import { LyricsItemCard } from "@/components/LyricsItemCard";
@@ -315,6 +315,78 @@ export default function LyricsGenerator() {
     }
   }, [id, refreshCount]);
 
+  // Auto-send: when navigated here from Home with an initial user message that
+  // has no assistant reply yet, fire the LLM automatically so the user doesn't
+  // have to re-submit manually.
+  const hasAutoSentRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoSentRef.current || !id) return;
+
+    const msg = getMessage(id);
+    if (!msg || msg.role !== "user") return;
+
+    // Only auto-send if this message has no descendants yet (no reply).
+    const leaf = getLatestLeaf(id);
+    if (leaf && leaf.id !== id) return;
+
+    hasAutoSentRef.current = true;
+    setIsLoading(true);
+
+    const ancestors = getAncestors(id);
+
+    const doSend = async () => {
+      if (!guardAction()) {
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const history: LLMChatMessage[] = [
+          { role: "system" as const, content: LYRICS_SYSTEM_PROMPT },
+          ...ancestors.map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          })),
+        ];
+        const settings = getSettings();
+        const client = createLLMClient(settings?.poeApiKey ?? undefined);
+        log({
+          category: "llm:request",
+          action: "llm:chat:start",
+          data: { userMessageId: id, historyLength: history.length },
+        });
+        const responseText = await client.chat(history);
+        const parsed = parseLyricsResponse(responseText);
+        const assistantMsg = createMessage({
+          role: "assistant",
+          content: responseText,
+          parentId: id,
+          ...(parsed ?? {}),
+        });
+        log({
+          category: "llm:response",
+          action: "llm:chat:complete",
+          data: { userMessageId: id, assistantMessageId: assistantMsg.id, parsed: parsed !== null },
+        });
+        navigate(`/lyrics/${assistantMsg.id}`, { replace: true });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        log({
+          category: "llm:response",
+          action: "llm:chat:error",
+          data: { userMessageId: id, error: errMsg },
+        });
+        showErrorToast({
+          message: `Generation failed: ${errMsg}. Please try again.`,
+          variant: "error",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    doSend();
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Scroll chat to bottom when ancestor path grows.
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -471,7 +543,14 @@ export default function LyricsGenerator() {
       aria-label="Lyrics"
       data-testid="lyrics-panel"
     >
-      <h2 className="text-lg font-semibold mb-4">Lyrics</h2>
+      <div className="mb-5 pb-4 border-b">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Lyrics</h2>
+        {latestAssistant?.title && (
+          <p className="text-xl font-bold mt-1 leading-tight" data-testid="lyrics-panel-title">
+            {latestAssistant.title}
+          </p>
+        )}
+      </div>
       {latestAssistant ? (
         <>
           {/* Frontmatter block */}
@@ -663,7 +742,7 @@ export default function LyricsGenerator() {
       aria-label="Chat"
       data-testid="chat-panel"
     >
-      <h2 className="text-lg font-semibold mb-4">Chat</h2>
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-5 pb-4 border-b">Chat</h2>
       {ChatHistory}
       {ChatForm}
     </section>
@@ -745,7 +824,7 @@ export default function LyricsGenerator() {
                 aria-label="Chat"
                 data-testid="chat-panel"
               >
-                <h2 className="text-lg font-semibold mb-4">Chat</h2>
+                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 pb-3 border-b">Chat</h2>
                 {ChatHistory}
                 {/* Chat input pinned to bottom of viewport on mobile */}
                 <div className="sticky bottom-0 bg-background pt-2 pb-4 shrink-0">
@@ -770,13 +849,14 @@ export default function LyricsGenerator() {
       )}
 
       {/* ── Bottom bar ───────────────────────────────────────────────────── */}
-      <div className="border-t p-4 flex justify-end shrink-0">
+      <div className="border-t bg-muted/30 px-4 py-3 flex justify-end shrink-0">
         <Button
           onClick={handleGenerateSongs}
           disabled={!id}
           data-testid="generate-songs-btn"
-          className="min-h-[44px]"
+          className="min-h-[44px] gap-2"
         >
+          <Zap size={14} aria-hidden="true" />
           Generate Songs
         </Button>
       </div>

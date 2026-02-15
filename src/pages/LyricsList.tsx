@@ -98,109 +98,97 @@ export default function LyricsList() {
   return (
     <div className="p-4 md:p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1>Lyrics List</h1>
-        <Button onClick={handleNewLyrics}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Lyrics
+        <div>
+          <h1>Lyrics</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            {allEntries.length === 0 ? "No songs yet" : `${allEntries.length} song${allEntries.length === 1 ? "" : "s"}`}
+          </p>
+        </div>
+        <Button onClick={handleNewLyrics} data-testid="new-lyrics-btn">
+          <Plus className="h-4 w-4 mr-1.5" />
+          New
         </Button>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-5">
         <input
           type="text"
           placeholder="Search by title or style…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search lyrics"
-          className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-muted-foreground mt-4" data-testid="lyrics-list-empty">
-          {search.trim() ? (
-            "No entries match your search."
-          ) : (
-            <>
-              No lyrics yet.{" "}
-              <Link to="/" className="underline underline-offset-2 hover:text-foreground">
-                Start a new song from home.
-              </Link>
-            </>
-          )}
-        </p>
+        <div className="mt-12 flex flex-col items-center gap-3 text-center" data-testid="lyrics-list-empty">
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+            <Plus className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">
+              {search.trim() ? "No matches found" : "No lyrics yet"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {search.trim() ? (
+                "Try a different search term."
+              ) : (
+                <>
+                  <Link to="/" className="underline underline-offset-2 hover:text-foreground">
+                    Start a new song
+                  </Link>{" "}
+                  from the home page.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
       ) : (
-        <div className="rounded-md border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Title
-                </th>
-                {/* Style column hidden on mobile (<768px) */}
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">
-                  Style
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Songs
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">
-                  Created
-                </th>
-                <th className="px-4 py-3 w-12" aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((entry, idx) => (
-                <tr
-                  key={entry.id}
-                  onClick={() => handleRowClick(entry.id)}
-                  className={`cursor-pointer hover:bg-muted/50 active:bg-muted/70 focus-within:bg-muted/30 transition-colors h-[44px] ${
-                    idx !== 0 ? "border-t" : ""
-                  }`}
-                >
-                  <td className="px-4 py-3 font-medium">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((entry) => {
+            const count = songCounts.get(entry.id) ?? 0;
+            return (
+              <div
+                key={entry.id}
+                onClick={() => handleRowClick(entry.id)}
+                className="group rounded-lg border bg-card p-4 cursor-pointer hover:shadow-sm hover:border-foreground/20 active:bg-muted/30 transition-all flex flex-col gap-2 min-h-[100px] overflow-hidden"
+                data-testid="lyrics-list-item"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-sm leading-snug">
                     {entry.title || (
-                      <span className="text-muted-foreground italic">
-                        Untitled
-                      </span>
+                      <span className="text-muted-foreground italic font-normal">Untitled</span>
                     )}
-                  </td>
-                  {/* Style column hidden on mobile (<768px) */}
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    {entry.style ? (
-                      <span
-                        className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
-                        data-tag-color={styleTagColor(entry.style)}
-                      >
-                        {entry.style}
-                      </span>
-                    ) : (
-                      <span className="italic text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td
-                    className="px-4 py-3 text-muted-foreground"
-                    aria-label={`${songCounts.get(entry.id) ?? 0} songs`}
+                  </p>
+                  <button
+                    onClick={(e) => handleDelete(e, entry.id)}
+                    aria-label={`Delete ${entry.title ?? "entry"}`}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-1 rounded min-h-[44px] min-w-[44px] inline-flex items-center justify-center -mt-1 -mr-1"
                   >
-                    {songCounts.get(entry.id) ?? 0}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                    {formatDate(entry.createdAt)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={(e) => handleDelete(e, entry.id)}
-                      aria-label={`Delete ${entry.title ?? "entry"}`}
-                      className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {entry.style && (
+                  <span
+                    className="self-start inline-block rounded-full px-2 py-0.5 text-xs font-medium max-w-full truncate"
+                    data-tag-color={styleTagColor(entry.style)}
+                    title={entry.style}
+                  >
+                    {entry.style}
+                  </span>
+                )}
+
+                <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground pt-1">
+                  <span aria-label={`${count} songs`}>
+                    {count === 0 ? "No songs" : `${count} song${count === 1 ? "" : "s"}`}
+                  </span>
+                  <span>{formatDate(entry.createdAt)}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

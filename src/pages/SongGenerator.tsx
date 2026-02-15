@@ -23,6 +23,7 @@
 
 import { memo, useCallback, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
+import { Zap, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiKeyMissingModal } from "@/components/ApiKeyMissingModal";
 import { useApiKeyGuard } from "@/hooks/useApiKeyGuard";
@@ -275,22 +276,36 @@ export default function SongGenerator() {
 
   return (
     <div className="p-4 md:p-8 max-w-3xl">
-      <h1 className="font-bold">Song Generator</h1>
-      <p className="text-muted-foreground mt-2">
-        Generate audio from your lyrics using ElevenLabs.
+      <div className="flex items-center gap-2.5 mb-1">
+        <Music size={18} className="text-primary" aria-hidden="true" />
+        <h1>Song Generator</h1>
+      </div>
+      <p className="text-muted-foreground mt-1 text-sm">
+        Generate audio versions of your lyrics with ElevenLabs.
       </p>
 
-      {/* Message info */}
+      {/* Message info + generate */}
       {message ? (
-        <div className="mt-4 rounded-md bg-muted p-4 text-sm font-mono" data-testid="song-entry-info">
-          <p>
-            <span className="text-muted-foreground">title:</span>{" "}
-            <span data-testid="song-entry-title">{message.title}</span>
-          </p>
-          <p>
-            <span className="text-muted-foreground">style:</span>{" "}
-            <span data-testid="song-entry-style">{message.style}</span>
-          </p>
+        <div className="mt-5 rounded-lg border bg-card p-4 flex items-center justify-between gap-4" data-testid="song-entry-info">
+          <div className="min-w-0">
+            <p className="font-semibold text-sm truncate" data-testid="song-entry-title">
+              {message.title || "Untitled"}
+            </p>
+            {message.style && (
+              <p className="text-xs text-muted-foreground mt-0.5 truncate" data-testid="song-entry-style">
+                {message.style}
+              </p>
+            )}
+          </div>
+          <Button
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            data-testid="generate-songs-btn"
+            className="min-h-[44px] shrink-0 gap-2"
+          >
+            <Zap size={14} aria-hidden="true" />
+            {isGenerating ? "Generating…" : "Generate"}
+          </Button>
         </div>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground" data-testid="no-entry-message">
@@ -299,18 +314,6 @@ export default function SongGenerator() {
             : "No lyrics message selected. Open a lyrics entry and click \"Generate Songs\"."}
         </p>
       )}
-
-      {/* Generate button */}
-      <div className="mt-6">
-        <Button
-          onClick={handleGenerate}
-          disabled={isGenerating}
-          data-testid="generate-songs-btn"
-          className="min-h-[44px]"
-        >
-          {isGenerating ? "Generating…" : "Generate"}
-        </Button>
-      </div>
 
       {/* In-progress slots (shown during generation) */}
       {slotEntries.length > 0 && (

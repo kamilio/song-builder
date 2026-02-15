@@ -38,16 +38,18 @@ function RouteLogger() {
 function TopBar() {
   return (
     <header
-      className="sticky top-0 z-40 flex items-center justify-between h-12 px-4 border-b bg-background gap-4"
+      className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b bg-background/95 backdrop-blur-sm gap-4"
       data-testid="top-bar"
     >
       {/* Branding */}
       <Link
         to="/"
-        className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity"
+        className="flex items-center gap-2 shrink-0 hover:opacity-75 transition-opacity"
         aria-label="Song Builder home"
       >
-        <Music className="h-4 w-4" />
+        <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
+          <Music className="h-3.5 w-3.5 text-primary-foreground" />
+        </div>
         <span className="font-semibold text-sm hidden sm:inline">Song Builder</span>
       </Link>
 

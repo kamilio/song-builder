@@ -13,6 +13,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Pin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSongs, getMessages, pinSong } from "@/lib/storage/storageService";
 import type { Song } from "@/lib/storage/types";
@@ -91,20 +92,29 @@ export default function PinnedSongs() {
 
   return (
     <div className="p-4 md:p-8 max-w-3xl">
-      <h1>Pinned Songs</h1>
-      <p className="text-muted-foreground mt-2">
-        Your pinned songs, ready to play or download.
+      <div className="flex items-center gap-2.5 mb-1">
+        <Pin size={18} className="text-primary" aria-hidden="true" />
+        <h1>Pinned Songs</h1>
+      </div>
+      <p className="text-muted-foreground mt-1 text-sm">
+        Your saved songs, ready to play or download.
       </p>
 
       {pinnedSongs.length === 0 ? (
-        <p
-          className="mt-6 text-sm text-muted-foreground"
+        <div
+          className="mt-10 flex flex-col items-center gap-3 text-center"
           data-testid="no-pinned-message"
         >
-          No pinned songs yet. Pin a song from the Songs View.
-        </p>
+          <Pin size={32} className="text-muted-foreground/40" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-medium text-foreground">No pinned songs yet</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Pin a song from the Song Generator to save it here.
+            </p>
+          </div>
+        </div>
       ) : (
-        <div className="mt-6 space-y-4" data-testid="pinned-song-list">
+        <div className="mt-6 space-y-3" data-testid="pinned-song-list">
           {pinnedSongs.map((song) => (
             <PinnedSongItem
               key={song.id}
@@ -140,25 +150,25 @@ function PinnedSongItem({
 }: PinnedSongItemProps) {
   return (
     <div
-      className="rounded-md border p-4"
+      className="rounded-lg border bg-card p-4 shadow-sm"
       data-testid="pinned-song-item"
     >
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <p className="font-medium text-sm" data-testid="pinned-song-title">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div className="min-w-0">
+          <p className="font-semibold text-sm truncate" data-testid="pinned-song-title">
             {song.title}
           </p>
           {entryTitle && (
             <Link
               to={`/lyrics/${song.messageId}/songs`}
-              className="text-xs text-primary underline-offset-2 hover:underline mt-0.5 block"
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline hover:text-foreground mt-0.5 block"
               data-testid="pinned-song-entry-title"
             >
-              {entryTitle}
+              from "{entryTitle}"
             </Link>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
