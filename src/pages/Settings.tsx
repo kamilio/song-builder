@@ -23,6 +23,7 @@ export default function Settings() {
   const [numSongs, setNumSongs] = useState(initial.numSongs);
   const [includeApiKey, setIncludeApiKey] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
+  const [importError, setImportError] = useState("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,11 +71,12 @@ export default function Settings() {
         const settings = getSettings();
         setApiKey(settings?.poeApiKey ?? "");
         setNumSongs(settings?.numSongs ?? 3);
+        setImportError("");
         setSavedMessage("Data imported successfully.");
         setTimeout(() => setSavedMessage(""), 3000);
       } catch {
-        setSavedMessage("Import failed: invalid JSON file.");
-        setTimeout(() => setSavedMessage(""), 5000);
+        setImportError("Import failed: file is not a valid JSON export.");
+        setTimeout(() => setImportError(""), 5000);
       }
     };
     reader.readAsText(file);
@@ -217,6 +219,16 @@ export default function Settings() {
             aria-label="Import JSON file"
           />
         </div>
+
+        {importError && (
+          <p
+            className="text-sm text-destructive"
+            data-testid="import-error"
+            role="alert"
+          >
+            {importError}
+          </p>
+        )}
       </div>
     </div>
   );

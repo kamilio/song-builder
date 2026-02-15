@@ -176,8 +176,11 @@ test.describe("Lyrics List page", () => {
   test("empty state message shown when no lyrics entries", async ({ page }) => {
     await seedFixture(page, emptyFixture);
     await page.goto("/lyrics");
+    await expect(page.getByTestId("lyrics-list-empty")).toBeVisible();
+    await expect(page.getByText(/No lyrics yet/)).toBeVisible();
+    // Should include a link back to home
     await expect(
-      page.getByText(/Click "New Lyrics" to get started/)
+      page.getByRole("link", { name: /Start a new song from home/ })
     ).toBeVisible();
   });
 

@@ -322,11 +322,21 @@ export default function SongGenerator() {
             >
               {state.loading ? (
                 <div
-                  className="animate-pulse text-sm text-muted-foreground"
+                  className="animate-pulse"
                   data-testid={`song-loading-${index}`}
                   aria-label={`Generating song ${index + 1}…`}
+                  role="status"
                 >
-                  Generating song {index + 1}…
+                  {/* Skeleton mimicking the shape of a SongItem card */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-4 w-1/3 rounded bg-muted" />
+                    <div className="flex gap-2">
+                      <div className="h-7 w-12 rounded bg-muted" />
+                      <div className="h-7 w-16 rounded bg-muted" />
+                      <div className="h-7 w-14 rounded bg-muted" />
+                    </div>
+                  </div>
+                  <div className="h-8 w-full rounded bg-muted" />
                 </div>
               ) : state.error ? (
                 <p className="text-sm text-destructive" data-testid={`song-error-${index}`}>
@@ -346,7 +356,7 @@ export default function SongGenerator() {
       )}
 
       {/* Pre-existing + newly generated songs (after slots clear) */}
-      {listedSongs.length > 0 && (
+      {listedSongs.length > 0 ? (
         <div className="mt-6 space-y-4" data-testid="song-list">
           {listedSongs.map((song) => (
             <div
@@ -363,6 +373,15 @@ export default function SongGenerator() {
             </div>
           ))}
         </div>
+      ) : (
+        slots.size === 0 && message && (
+          <p
+            className="mt-6 text-sm text-muted-foreground"
+            data-testid="no-songs-message"
+          >
+            No songs yet. Hit Generate to create some.
+          </p>
+        )
       )}
 
       {isModalOpen && <ApiKeyMissingModal onClose={closeModal} />}

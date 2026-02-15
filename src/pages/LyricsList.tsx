@@ -13,7 +13,7 @@
  */
 
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,10 +109,17 @@ export default function LyricsList() {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-muted-foreground mt-4">
-          {search.trim()
-            ? "No entries match your search."
-            : 'No lyrics entries yet. Click "New Lyrics" to get started.'}
+        <p className="text-muted-foreground mt-4" data-testid="lyrics-list-empty">
+          {search.trim() ? (
+            "No entries match your search."
+          ) : (
+            <>
+              No lyrics yet.{" "}
+              <Link to="/" className="underline underline-offset-2 hover:text-foreground">
+                Start a new song from home.
+              </Link>
+            </>
+          )}
         </p>
       ) : (
         <div className="rounded-md border overflow-hidden">

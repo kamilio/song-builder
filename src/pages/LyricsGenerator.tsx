@@ -37,6 +37,7 @@ import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiKeyMissingModal } from "@/components/ApiKeyMissingModal";
 import { LyricsItemCard } from "@/components/LyricsItemCard";
+import { Toast, useToast } from "@/components/Toast";
 import { useApiKeyGuard } from "@/hooks/useApiKeyGuard";
 import {
   createMessage,
@@ -279,6 +280,7 @@ export default function LyricsGenerator() {
   const [isLoading, setIsLoading] = useState(false);
   // Refresh counter: incrementing it causes message to be re-read from storage.
   const [refreshCount, setRefreshCount] = useState(0);
+  const [errorToast, showErrorToast] = useToast(5000);
   // Mobile tab state: "lyrics" | "chat"
   const [activeTab, setActiveTab] = useState<"lyrics" | "chat">("lyrics");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -429,13 +431,18 @@ export default function LyricsGenerator() {
         // Navigate to the new assistant message.
         navigate(`/lyrics/${assistantMsg.id}`, { replace: !id });
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
         log({
           category: "llm:response",
           action: "llm:chat:error",
           data: {
             userMessageId: userMsg.id,
-            error: err instanceof Error ? err.message : String(err),
+            error: errMsg,
           },
+        });
+        showErrorToast({
+          message: `Generation failed: ${errMsg}. Please try again.`,
+          variant: "error",
         });
         // On error, still navigate to the user message so the state is saved.
         navigate(`/lyrics/${userMsg.id}`, { replace: !id });
@@ -444,7 +451,7 @@ export default function LyricsGenerator() {
         if (id) setRefreshCount((c) => c + 1);
       }
     },
-    [userInput, id, currentMessage, ancestorPath, isLoading, guardAction, navigate]
+    [userInput, id, currentMessage, ancestorPath, isLoading, guardAction, navigate, showErrorToast]
   );
 
   function handleGenerateSongs() {
@@ -603,11 +610,17 @@ export default function LyricsGenerator() {
       )}
       {isLoading && (
         <div
-          className="rounded-md px-3 py-2 text-sm max-w-[85%] bg-muted animate-pulse"
+          className="max-w-[92%] rounded-md border p-3 animate-pulse"
           data-testid="chat-loading"
           aria-label="Claude is thinking…"
+          role="status"
         >
-          Claude is thinking…
+          {/* Skeleton mimicking the shape of a LyricsItemCard */}
+          <div className="h-4 w-2/3 rounded bg-muted mb-2" />
+          <div className="h-3 w-1/3 rounded bg-muted mb-2" />
+          <div className="h-3 w-full rounded bg-muted mb-1" />
+          <div className="h-3 w-full rounded bg-muted mb-1" />
+          <div className="h-3 w-3/4 rounded bg-muted" />
         </div>
       )}
       <div ref={chatEndRef} />
@@ -768,6 +781,7 @@ export default function LyricsGenerator() {
       </div>
 
       {isModalOpen && <ApiKeyMissingModal onClose={closeModal} />}
+      <Toast toast={errorToast} onDismiss={() => showErrorToast(null)} />
     </div>
   );
 }

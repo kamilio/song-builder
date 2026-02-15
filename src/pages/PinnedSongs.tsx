@@ -101,7 +101,7 @@ export default function PinnedSongs() {
           className="mt-6 text-sm text-muted-foreground"
           data-testid="no-pinned-message"
         >
-          No pinned songs yet. Pin songs from the Song Generator.
+          No pinned songs yet. Pin a song from the Songs View.
         </p>
       ) : (
         <div className="mt-6 space-y-4" data-testid="pinned-song-list">
