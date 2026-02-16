@@ -32,8 +32,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Pencil, Plus, Zap } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Music, Pencil, Plus, Zap } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { ApiKeyMissingModal } from "@/shared/components/ApiKeyMissingModal";
 import { LyricsItemCard } from "@/music/components/LyricsItemCard";
@@ -45,6 +45,7 @@ import {
   getAncestors,
   getLatestLeaf,
   getSettings,
+  getSongsByMessage,
   updateMessage,
 } from "@/music/lib/storage/storageService";
 import type { Message } from "@/music/lib/storage/types";
@@ -285,6 +286,11 @@ export default function LyricsGenerator() {
   const [activeTab, setActiveTab] = useState<"lyrics" | "chat">("lyrics");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Count of non-deleted songs for the current lyric (message id).
+  const [songsCount, setSongsCount] = useState<number>(
+    () => (id ? getSongsByMessage(id).filter((s) => !s.deleted).length : 0)
+  );
+
   // Current assistant message (the one whose lyrics are shown in the left panel).
   const [currentMessage, setCurrentMessage] = useState<Message | null>(
     () => (id ? getMessage(id) : null)
@@ -307,6 +313,7 @@ export default function LyricsGenerator() {
     const msg = id ? getMessage(id) : null;
     setCurrentMessage(msg);
     setAncestorPath(id ? getAncestors(id) : []);
+    setSongsCount(id ? getSongsByMessage(id).filter((s) => !s.deleted).length : 0);
     if (id) {
       const leaf = getLatestLeaf(id);
       setLatestLeafId(leaf && leaf.id !== id ? leaf.id : null);
@@ -825,6 +832,17 @@ export default function LyricsGenerator() {
           <Plus size={14} aria-hidden="true" />
           New Lyrics
         </Button>
+        {id && songsCount > 0 && (
+          <Link
+            to={`/music/lyrics/${id}/songs`}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="songs-count-link"
+            onClick={() => log({ category: "user:action", action: "lyrics:songs-count-link", data: { messageId: id, count: songsCount } })}
+          >
+            <Music size={14} aria-hidden="true" />
+            {songsCount} {songsCount === 1 ? "song" : "songs"}
+          </Link>
+        )}
         <Button
           onClick={handleGenerateSongs}
           disabled={!id}

@@ -21,7 +21,7 @@
 import { test, expect } from "@playwright/test";
 import { seedFixture } from "./helpers/seed";
 import { screenshotPage } from "./helpers/screenshot";
-import { baseFixture, multiMessageFixture } from "../fixtures/index";
+import { baseFixture, multiMessageFixture, songGeneratorFixture } from "../fixtures/index";
 
 test.describe("Lyrics Generator page", () => {
   test.beforeEach(async ({ page }) => {
@@ -389,5 +389,60 @@ test.describe("Lyrics Generator – US-004: tree traversal and ancestor path", (
     await page.getByTestId("tab-chat").click();
     await expect(page.getByTestId("chat-input")).toBeVisible();
     await expect(page.getByTestId("chat-history")).toBeVisible();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// US-022: Songs count link in LyricsGenerator
+// ────────────────────────────────────────────────────────────────────────────
+
+test.describe("Lyrics Generator – US-022: songs count link", () => {
+  test("shows songs count link when songs exist for the current lyric", async ({
+    page,
+  }) => {
+    // baseFixture: fixture-msg-1a has 1 non-deleted song
+    await seedFixture(page, baseFixture);
+    await page.goto("/music/lyrics/fixture-msg-1a");
+
+    const link = page.getByTestId("songs-count-link");
+    await expect(link).toBeVisible();
+    await expect(link).toContainText("1 song");
+  });
+
+  test("songs count link navigates to /music/lyrics/:id/songs", async ({
+    page,
+  }) => {
+    await seedFixture(page, baseFixture);
+    await page.goto("/music/lyrics/fixture-msg-1a");
+
+    await page.getByTestId("songs-count-link").click();
+    await expect(page).toHaveURL(/\/music\/lyrics\/fixture-msg-1a\/songs/);
+  });
+
+  test("shows plural 'songs' when count is more than one", async ({ page }) => {
+    // songGeneratorFixture: fixture-msg-songs-a has 3 non-deleted songs
+    await seedFixture(page, songGeneratorFixture);
+    await page.goto("/music/lyrics/fixture-msg-songs-a");
+
+    const link = page.getByTestId("songs-count-link");
+    await expect(link).toBeVisible();
+    await expect(link).toContainText("3 songs");
+  });
+
+  test("does not show songs count link when zero songs exist", async ({
+    page,
+  }) => {
+    // multiMessageFixture has no songs
+    await seedFixture(page, multiMessageFixture);
+    await page.goto("/music/lyrics/fixture-multi-msg-3a");
+
+    await expect(page.getByTestId("songs-count-link")).not.toBeVisible();
+  });
+
+  test("does not show songs count link at /lyrics/new", async ({ page }) => {
+    await seedFixture(page, baseFixture);
+    await page.goto("/music/lyrics/new");
+
+    await expect(page.getByTestId("songs-count-link")).not.toBeVisible();
   });
 });
