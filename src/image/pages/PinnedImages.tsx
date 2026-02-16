@@ -11,7 +11,7 @@
 
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
-import { ImageIcon, Pin, PinOff, Settings, Bug } from "lucide-react";
+import { ImageIcon, Pin, PinOff, Plus, Settings, Bug } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
@@ -63,7 +63,18 @@ function TopBar() {
         <span className="font-semibold text-sm hidden sm:inline">Studio</span>
       </Link>
 
-      <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleReportBug} />
+      <div className="flex items-center gap-2 shrink-0">
+        <Link
+          to="/image"
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium border border-border bg-background hover:bg-accent transition-colors"
+          data-testid="new-session-btn"
+          aria-label="New session"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="hidden sm:inline">New Session</span>
+        </Link>
+        <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleReportBug} />
+      </div>
     </header>
   );
 }

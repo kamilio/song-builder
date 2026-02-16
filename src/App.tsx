@@ -1,6 +1,6 @@
 import { ReactNode, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Music, List, Pin, Settings as SettingsIcon, Bug } from "lucide-react";
+import { Music, List, Pin, Plus, Settings as SettingsIcon, Bug } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Breadcrumb } from "@/music/components/Breadcrumb";
 import { NavMenu } from "@/shared/components/NavMenu";
@@ -95,8 +95,19 @@ function TopBar() {
         <Breadcrumb />
       </div>
 
-      {/* Navigation menu */}
-      <NavMenu items={MUSIC_NAV_ITEMS} onReportBug={handleReportBug} />
+      {/* New Lyrics shortcut + Navigation menu */}
+      <div className="flex items-center gap-2 shrink-0">
+        <Link
+          to="/music/lyrics/new"
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium border border-border bg-background hover:bg-accent transition-colors"
+          data-testid="new-lyrics-btn"
+          aria-label="New lyrics"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="hidden sm:inline">New Lyrics</span>
+        </Link>
+        <NavMenu items={MUSIC_NAV_ITEMS} onReportBug={handleReportBug} />
+      </div>
     </header>
   );
 }
