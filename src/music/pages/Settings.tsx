@@ -44,7 +44,8 @@ function loadInitialSettings() {
     apiKey: settings?.poeApiKey ?? "",
     numSongs: settings?.numSongs ?? 3,
     chatModel: settings?.chatModel ?? "",
-    numImages: imageSettings?.numImages ?? 3,
+    // US-028: imagesPerModel replaces numImages. Fall back to numImages for backward compat.
+    imagesPerModel: imageSettings?.imagesPerModel ?? imageSettings?.numImages ?? 3,
   };
 }
 
@@ -61,7 +62,7 @@ export default function Settings() {
   const [apiKey, setApiKey] = useState(initial.apiKey);
   const [numSongs, setNumSongs] = useState(initial.numSongs);
   const [chatModel, setChatModel] = useState(initial.chatModel);
-  const [numImages, setNumImages] = useState(initial.numImages);
+  const [imagesPerModel, setImagesPerModel] = useState(initial.imagesPerModel);
   const [includeApiKey, setIncludeApiKey] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [importError, setImportError] = useState("");
@@ -134,7 +135,7 @@ export default function Settings() {
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     saveSettings({ poeApiKey: apiKey, numSongs, ...(chatModel ? { chatModel } : {}) });
-    saveImageSettings({ numImages });
+    saveImageSettings({ numImages: imagesPerModel, imagesPerModel });
     setSavedMessage("Settings saved.");
     setTimeout(() => setSavedMessage(""), 3000);
   }
@@ -268,16 +269,14 @@ export default function Settings() {
         <div className="rounded-lg border bg-card p-5 space-y-4">
           <h2 className="text-base font-semibold">Image</h2>
           <div className="space-y-1.5">
-            <label htmlFor="numImages" className="text-sm font-medium">
-              Images to generate per request
+            <label htmlFor="imagesPerModel" className="text-sm font-medium">
+              Images per model
             </label>
             <input
-              id="numImages"
+              id="imagesPerModel"
               type="number"
-              min={1}
-              max={10}
-              value={numImages}
-              onChange={(e) => setNumImages(Number(e.target.value))}
+              value={imagesPerModel}
+              onChange={(e) => setImagesPerModel(Number(e.target.value))}
               className="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>

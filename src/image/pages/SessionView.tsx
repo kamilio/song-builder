@@ -91,6 +91,7 @@ import { useReportBug } from "@/shared/hooks/useReportBug";
 import { IMAGE_MODELS } from "@/image/lib/imageModels";
 import { downloadBlob } from "@/shared/lib/downloadBlob";
 import type { ImageModelDef } from "@/image/lib/imageModels";
+import { ModelMultiSelect } from "@/image/components/ModelMultiSelect";
 import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 import { FullscreenImageViewer } from "@/image/components/FullscreenImageViewer";
 
@@ -409,10 +410,13 @@ function ErrorCard({ message, onRetry, isRetrying }: { message: string; onRetry?
  * US-007: The error variant includes an optional `isRetrying` flag that is
  * set to true while a retry for this specific slot is in-flight, so the
  * Retry button can be disabled during that time.
+ *
+ * US-028: The error variant stores the `model` that was used so retry can
+ * reuse the same model without requiring the current selection state.
  */
 type SlotResult =
   | { kind: "item"; item: ImageItem }
-  | { kind: "error"; message: string; isRetrying?: boolean };
+  | { kind: "error"; message: string; isRetrying?: boolean; model?: ImageModelDef };
 
 // ─── ImageCard (US-023, US-025) ────────────────────────────────────────────
 
@@ -452,12 +456,19 @@ interface ImageCardProps {
  * shown instead of the image. The old image is preserved in storage and will
  * be visible in thumbnails; the new image appears alongside it once ready.
  *
+ * US-028: When item.model is set, a top-right badge shows the model label.
+ *
  * The Pin button visually distinguishes pinned (filled icon + tinted background)
  * from unpinned (outline icon) state.
  */
 function ImageCard({ item, index, sessionTitle, onPinToggle, onRegenerate, isRegenerating, onOpenFullscreen }: ImageCardProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const elapsed = useElapsedTimer(isRegenerating ?? false);
+
+  // US-028: Derive the model label for the badge. Falls back to the raw model id.
+  const modelLabel = item.model
+    ? (IMAGE_MODELS.find((m) => m.id === item.model)?.label ?? item.model)
+    : null;
 
   const handleDownload = useCallback(async () => {
     if (isDownloading) return;
@@ -507,6 +518,16 @@ function ImageCard({ item, index, sessionTitle, onPinToggle, onRegenerate, isReg
         onClick={onOpenFullscreen ? () => onOpenFullscreen(item) : undefined}
         aria-label={onOpenFullscreen ? "Open fullscreen" : undefined}
       />
+      {/* US-028: Model badge — shown only when a model id is stored on the item */}
+      {modelLabel && (
+        <span
+          className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white leading-tight"
+          data-testid="model-badge"
+          aria-label={`Model: ${modelLabel}`}
+        >
+          {modelLabel}
+        </span>
+      )}
       <div className="absolute bottom-2 right-2 flex gap-1">
         {/* Pin toggle button (US-024) */}
         <button
@@ -787,21 +808,19 @@ export default function SessionView() {
   // null means the viewer is closed.
   const [viewerItem, setViewerItem] = useState<ImageItem | null>(null);
 
-  // Selected image model (US-004): default to the first model in the list.
-  const [selectedModel, setSelectedModel] = useState<ImageModelDef>(IMAGE_MODELS[0]);
+  // US-028: Selected image models — allows multi-model generation. Default to first model.
+  const [selectedModels, setSelectedModels] = useState<ImageModelDef[]>([IMAGE_MODELS[0]]);
 
   // Remix file upload (US-006): holds the user-selected reference image file,
-  // or null when no file is selected or the current model does not support remix.
+  // or null when no file is selected or no selected model supports remix.
   const [remixFile, setRemixFile] = useState<File | null>(null);
 
-  // Clear remixFile whenever selectedModel changes to a model that does not
-  // support remix (US-006 acceptance criterion: selecting a non-remix model
-  // clears any previously selected file).
+  // Clear remixFile whenever selectedModels changes to a set where no model supports remix.
   useEffect(() => {
-    if (!selectedModel.supportsRemix) {
+    if (!selectedModels.some((m) => m.supportsRemix)) {
       setRemixFile(null);
     }
-  }, [selectedModel]);
+  }, [selectedModels]);
 
   // API key guard (US-020/US-023): shows ApiKeyMissingModal when poeApiKey is absent.
   const { isModalOpen: isApiKeyModalOpen, guardAction, closeModal: closeApiKeyModal, proceedWithPendingAction: proceedApiKey } = useApiKeyGuard();
@@ -889,10 +908,13 @@ export default function SessionView() {
     try {
       const musicSettings = getSettings();
       const imageSettings = imageStorageService.getImageSettings();
-      const numImages = imageSettings?.numImages ?? 3;
+      // US-028: imagesPerModel replaces numImages when multiple models are used.
+      // Fall back to numImages then 3 for backward compat.
+      const imagesPerModel = imageSettings?.imagesPerModel ?? imageSettings?.numImages ?? 3;
+      const totalSlots = selectedModels.length * imagesPerModel;
 
       // Show skeleton cards in the main pane while generation is in-flight (US-021).
-      setSkeletonCount(numImages);
+      setSkeletonCount(totalSlots);
 
       const client = createLLMClient(musicSettings?.poeApiKey ?? undefined);
 
@@ -920,12 +942,15 @@ export default function SessionView() {
         });
       }
 
-      // Fire N independent parallel requests using allSettled so that a single
-      // failure does not abort sibling requests (US-022).
-      // Pass selected model id, extraBody, and remixImageBase64 through (US-004, US-005, US-007).
+      // US-028: Fire imagesPerModel independent parallel requests per selected model.
+      // allSettled so that a single failure does not abort sibling requests (US-022).
+      // Build a flat array of [model, promise] pairs to preserve slot→model mapping.
+      const slotModels: ImageModelDef[] = selectedModels.flatMap((model) =>
+        Array.from({ length: imagesPerModel }, () => model)
+      );
       const settled = await Promise.allSettled(
-        Array.from({ length: numImages }, () =>
-          client.generateImage(trimmed, 1, selectedModel.id, selectedModel.extraBody, remixImageBase64)
+        slotModels.map((model) =>
+          client.generateImage(trimmed, 1, model.id, model.extraBody, remixImageBase64)
         )
       );
 
@@ -935,17 +960,19 @@ export default function SessionView() {
       refreshBalance(musicSettings?.poeApiKey);
 
       // Build per-slot results: persist successful URLs and capture error messages.
-      const slots: SlotResult[] = settled.map((result) => {
+      // US-028: pass model id so the badge can identify which model generated each image.
+      const slots: SlotResult[] = settled.map((result, i) => {
+        const model = slotModels[i];
         if (result.status === "fulfilled") {
           const url = result.value[0];
-          const item = imageStorageService.createItem({ generationId: generation.id, url });
+          const item = imageStorageService.createItem({ generationId: generation.id, url, model: model.id });
           return { kind: "item", item } as SlotResult;
         } else {
           const message =
             result.reason instanceof Error
               ? result.reason.message
               : "Generation failed";
-          return { kind: "error", message } as SlotResult;
+          return { kind: "error", message, model } as SlotResult;
         }
       });
 
@@ -973,7 +1000,7 @@ export default function SessionView() {
         setIsGenerating(false);
       }
     }
-  }, [id, data, prompt, isGenerating, selectedModel, remixFile, refreshBalance]);
+  }, [id, data, prompt, isGenerating, selectedModels, remixFile, refreshBalance]);
 
   const handleGenerate = useCallback(() => {
     // Guard: show modal and abort if no API key is configured (US-020/US-023).
@@ -1041,11 +1068,19 @@ export default function SessionView() {
         });
       }
 
+      // US-028: use the model stored on the error slot so retry uses the same model.
+      // Fall back to the first selected model for backward compat.
+      const currentSlot = slotResults?.[slotIndex];
+      const retryModel =
+        (currentSlot?.kind === "error" && currentSlot.model)
+          ? currentSlot.model
+          : selectedModels[0];
+
       const result = await client.generateImage(
         trimmed,
         1,
-        selectedModel.id,
-        selectedModel.extraBody,
+        retryModel.id,
+        retryModel.extraBody,
         remixImageBase64
       );
 
@@ -1055,6 +1090,7 @@ export default function SessionView() {
       const item = imageStorageService.createItem({
         generationId: latestGeneration.id,
         url,
+        model: retryModel.id,
       });
 
       // Refresh balance after successful retry (US-024).
@@ -1089,7 +1125,7 @@ export default function SessionView() {
         );
       });
     }
-  }, [id, data, prompt, guardAction, selectedModel, remixFile, refreshBalance]);
+  }, [id, data, prompt, guardAction, selectedModels, remixFile, refreshBalance, slotResults]);
 
   /**
    * US-025: Regenerates a single existing image card.
@@ -1139,11 +1175,16 @@ export default function SessionView() {
         });
       }
 
+      // US-028: use the model from the source item so regen preserves the original model.
+      // Fall back to first selected model if the item has no model stored (old data).
+      const regenModelId = item.model ?? selectedModels[0].id;
+      const regenModelDef = IMAGE_MODELS.find((m) => m.id === regenModelId) ?? selectedModels[0];
+
       const result = await client.generateImage(
         trimmed,
         1,
-        selectedModel.id,
-        selectedModel.extraBody,
+        regenModelDef.id,
+        regenModelDef.extraBody,
         remixImageBase64
       );
 
@@ -1152,7 +1193,7 @@ export default function SessionView() {
       const url = result[0];
       // Store the new image in the same generation; it will appear alongside
       // the original when the session data is reloaded below.
-      imageStorageService.createItem({ generationId, url });
+      imageStorageService.createItem({ generationId, url, model: regenModelDef.id });
 
       // Refresh balance after successful regeneration (US-024).
       refreshBalance(musicSettings?.poeApiKey);
@@ -1195,7 +1236,7 @@ export default function SessionView() {
         });
       }
     }
-  }, [id, data, prompt, guardAction, selectedModel, remixFile, refreshBalance, slotResults]);
+  }, [id, data, prompt, guardAction, selectedModels, remixFile, refreshBalance, slotResults]);
 
   if (!data) {
     return <Navigate to="/image" replace />;
@@ -1255,34 +1296,22 @@ export default function SessionView() {
           data-testid="bottom-bar"
         >
           <div className="flex flex-col gap-2 max-w-3xl mx-auto">
-            {/* Model picker (US-004) */}
+            {/* US-028: Model multi-select */}
             <div className="flex items-center gap-2">
-              <label
-                htmlFor="image-model-picker"
+              <span
                 className="text-xs text-muted-foreground whitespace-nowrap shrink-0"
               >
                 Image model
-              </label>
-              <select
-                id="image-model-picker"
-                value={selectedModel.id}
-                onChange={(e) => {
-                  const model = IMAGE_MODELS.find((m) => m.id === e.target.value);
-                  if (model) setSelectedModel(model);
-                }}
-                className="text-xs border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              </span>
+              <ModelMultiSelect
+                models={IMAGE_MODELS}
+                selected={selectedModels}
+                onChange={setSelectedModels}
                 data-testid="model-picker"
-                aria-label="Image model"
-              >
-                {IMAGE_MODELS.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
-            {/* Remix image upload (US-006): only shown when selected model supports remix */}
-            {selectedModel.supportsRemix && (
+            {/* Remix image upload (US-006): shown when any selected model supports remix */}
+            {selectedModels.some((m) => m.supportsRemix) && (
               <div className="flex items-center gap-2">
                 <label
                   htmlFor="remix-image-upload"

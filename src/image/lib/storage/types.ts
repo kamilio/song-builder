@@ -23,10 +23,14 @@ export interface ImageItem {
   pinned: boolean;
   deleted: boolean;
   createdAt: string;
+  /** The image model id used to generate this item (US-028). Optional for backward compat. */
+  model?: string;
 }
 
 export interface ImageSettings {
   numImages: number;
+  /** Number of images to generate per model when multiple models are selected (US-028). Default 3. */
+  imagesPerModel?: number;
 }
 
 export interface ImageStorageExport {
