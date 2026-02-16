@@ -113,7 +113,7 @@ export function LyricsItemCard({ message, onDelete }: LyricsItemCardProps) {
                 type="button"
                 onClick={onDelete}
                 aria-label={`Delete ${message.title ?? "entry"}`}
-                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded min-h-[32px] min-w-[32px] inline-flex items-center justify-center -mt-0.5 -mr-1"
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded min-h-[44px] min-w-[44px] inline-flex items-center justify-center -mt-0.5 -mr-1"
                 data-testid="card-delete-btn"
               >
                 <Trash2 className="h-3.5 w-3.5" />

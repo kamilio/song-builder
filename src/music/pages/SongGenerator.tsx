@@ -43,14 +43,18 @@ import { downloadBlob } from "@/shared/lib/downloadBlob";
 import { log } from "@/music/lib/actionLog";
 import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 
-/** Build the style prompt sent to ElevenLabs from a message's lyrics fields. */
+/** Build the style prompt sent to ElevenLabs from a message's lyrics fields.
+ * Falls back to the raw message content if no structured fields were parsed. */
 function buildStylePrompt(message: Message): string {
   const parts: string[] = [];
   if (message.title) parts.push(`Title: ${message.title}`);
   if (message.style) parts.push(`Style: ${message.style}`);
   if (message.commentary) parts.push(`Commentary: ${message.commentary}`);
   if (message.lyricsBody) parts.push(`\nLyrics:\n${message.lyricsBody}`);
-  return parts.join("\n");
+  const prompt = parts.join("\n");
+  // If no structured fields were extracted, fall back to the raw content so
+  // ElevenLabs always receives something to generate from.
+  return prompt || message.content;
 }
 
 /** State for a single in-progress or completed song generation slot. */

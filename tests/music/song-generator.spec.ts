@@ -45,7 +45,7 @@ test.describe("Song Generator page", () => {
 
   test("renders entry info when messageId is provided via query param", async ({ page }) => {
     await seedFixture(page, baseFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     await expect(page.getByTestId("song-entry-info")).toBeVisible();
     await expect(page.getByTestId("song-entry-title")).toHaveText(
@@ -69,28 +69,29 @@ test.describe("Song Generator page", () => {
 
   test("shows pre-existing songs from storage on load (legacy route)", async ({ page }) => {
     await seedFixture(page, songGeneratorFixture);
-    await page.goto("/songs?messageId=fixture-msg-songs-a");
+    await page.goto("/music/songs?messageId=fixture-msg-songs-a");
 
     // 3 pre-existing songs in the fixture
     await expect(page.getByTestId("song-item")).toHaveCount(3);
     await expect(page.getByTestId("song-audio").first()).toHaveAttribute("src");
   });
 
-  test("generate button is enabled even when no message is selected (API key guard still fires)", async ({
+  test("no-entry message shown when no message is selected; no generate button visible", async ({
     page,
   }) => {
     await seedFixture(page, baseFixture);
     await page.goto("/music/songs");
 
-    // Button is always enabled so the API key guard can show the modal if needed.
-    await expect(page.getByTestId("generate-songs-btn")).toBeEnabled();
+    // Without a messageId, the no-entry message is shown and there is no generate button.
+    await expect(page.getByTestId("no-entry-message")).toBeVisible();
+    await expect(page.getByTestId("generate-songs-btn")).not.toBeVisible();
   });
 
   test("shows API key modal when API key is absent and user triggers generation", async ({
     page,
   }) => {
     await seedFixture(page, noApiKeyFixture);
-    await page.goto("/songs?messageId=fixture-msg-nokey-a");
+    await page.goto("/music/songs?messageId=fixture-msg-nokey-a");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -102,7 +103,7 @@ test.describe("Song Generator page", () => {
   }) => {
     await seedFixture(page, baseFixture);
     // baseFixture has numSongs: 3
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -145,7 +146,7 @@ test.describe("Song Generator page", () => {
 
   test("generated songs are persisted to localStorage", async ({ page }) => {
     await seedFixture(page, baseFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -187,7 +188,7 @@ test.describe("Song Generator page", () => {
       songs: [], // no pre-existing songs so count is easy to assert
     };
     await seedFixture(page, twoSongsFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -201,7 +202,7 @@ test.describe("Song Generator page", () => {
     page,
   }) => {
     await seedFixture(page, baseFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -232,7 +233,7 @@ test.describe("Song Generator page", () => {
   }) => {
     await screenshotPage(
       page,
-      "/songs?messageId=fixture-msg-songs-a",
+      "/music/songs?messageId=fixture-msg-songs-a",
       songGeneratorFixture,
       { path: "screenshots/song-generator.png" }
     );

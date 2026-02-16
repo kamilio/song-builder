@@ -53,7 +53,7 @@ test.describe("US-013: Empty states", () => {
       songs: [],
     };
     await seedFixture(page, noSongsFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     const emptyEl = page.getByTestId("no-songs-message");
     await expect(emptyEl).toBeVisible();
@@ -80,7 +80,7 @@ test.describe("US-013: Empty states", () => {
       songs: [],
     };
     await seedFixture(page, noSongsFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -97,9 +97,8 @@ test.describe("US-013: Empty states", () => {
 
     const emptyEl = page.getByTestId("no-pinned-message");
     await expect(emptyEl).toBeVisible();
-    await expect(emptyEl).toHaveText(
-      "No pinned songs yet. Pin a song from the Songs View."
-    );
+    await expect(emptyEl).toContainText("No pinned songs yet");
+    await expect(emptyEl).toContainText("Pin a song from the Song Generator to save it here.");
   });
 
   test("LyricsList, SongsView, PinnedSongs: all render empty states with emptyFixture", async ({
@@ -128,7 +127,7 @@ test.describe("US-013: Loading skeletons", () => {
     page,
   }) => {
     await seedFixture(page, baseFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -284,7 +283,7 @@ test.describe("US-013: Empty states at 375×812 mobile", () => {
   }) => {
     const noSongsFixture = { ...baseFixture, songs: [] };
     await seedFixture(page, noSongsFixture);
-    await page.goto("/songs?messageId=fixture-msg-1a");
+    await page.goto("/music/songs?messageId=fixture-msg-1a");
     await expect(page.getByTestId("no-songs-message")).toBeVisible();
   });
 });

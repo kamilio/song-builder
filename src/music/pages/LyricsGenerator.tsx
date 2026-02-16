@@ -92,7 +92,7 @@ function parseLyricsResponse(text: string): {
   commentary: string;
   lyricsBody: string;
 } | null {
-  const match = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  const match = text.match(/(?:^|\n)---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return null;
 
   const frontmatter = match[1];
