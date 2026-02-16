@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ImageIcon, Pin, Settings, Bug } from "lucide-react";
+import { ImageIcon, LayoutList, Pin, Settings, Bug } from "lucide-react";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
@@ -9,6 +9,12 @@ import { imageStorageService } from "@/image/lib/storage";
 import { log, getAll } from "@/music/lib/actionLog";
 
 const IMAGE_NAV_ITEMS: MenuItem[] = [
+  {
+    label: "All Sessions",
+    href: "/image/sessions",
+    icon: LayoutList,
+    "data-testid": "nav-menu-all-sessions",
+  },
   {
     label: "Pinned Images",
     href: "/image/pinned",

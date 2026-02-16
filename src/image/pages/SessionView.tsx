@@ -67,7 +67,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ImageIcon, Pin, PinOff, Settings, Bug, Download } from "lucide-react";
+import { ImageIcon, LayoutList, Pin, PinOff, Settings, Bug, Download } from "lucide-react";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
@@ -144,6 +144,12 @@ async function downloadImage(url: string, filename: string): Promise<void> {
 // ─── Navigation items ──────────────────────────────────────────────────────
 
 const IMAGE_NAV_ITEMS: MenuItem[] = [
+  {
+    label: "All Sessions",
+    href: "/image/sessions",
+    icon: LayoutList,
+    "data-testid": "nav-menu-all-sessions",
+  },
   {
     label: "Pinned Images",
     href: "/image/pinned",
