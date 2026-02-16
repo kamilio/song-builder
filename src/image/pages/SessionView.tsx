@@ -644,6 +644,19 @@ export default function SessionView() {
   // Selected image model (US-004): default to the first model in the list.
   const [selectedModel, setSelectedModel] = useState<ImageModelDef>(IMAGE_MODELS[0]);
 
+  // Remix file upload (US-006): holds the user-selected reference image file,
+  // or null when no file is selected or the current model does not support remix.
+  const [remixFile, setRemixFile] = useState<File | null>(null);
+
+  // Clear remixFile whenever selectedModel changes to a model that does not
+  // support remix (US-006 acceptance criterion: selecting a non-remix model
+  // clears any previously selected file).
+  useEffect(() => {
+    if (!selectedModel.supportsRemix) {
+      setRemixFile(null);
+    }
+  }, [selectedModel]);
+
   // API key guard (US-020): shows ApiKeyMissingModal when poeApiKey is absent.
   const { isModalOpen: isApiKeyModalOpen, guardAction, closeModal: closeApiKeyModal } = useApiKeyGuard();
 
@@ -872,6 +885,31 @@ export default function SessionView() {
                 ))}
               </select>
             </div>
+            {/* Remix image upload (US-006): only shown when selected model supports remix */}
+            {selectedModel.supportsRemix && (
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="remix-image-upload"
+                  className="text-xs text-muted-foreground whitespace-nowrap shrink-0"
+                >
+                  Reference image
+                </label>
+                <input
+                  id="remix-image-upload"
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={(e) => setRemixFile(e.target.files?.[0] ?? null)}
+                  className="text-xs"
+                  data-testid="remix-image-upload"
+                  aria-label="Reference image for remix"
+                />
+                {remixFile && (
+                  <span className="text-xs text-muted-foreground truncate max-w-[180px]" data-testid="remix-file-name">
+                    {remixFile.name}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-3 items-end max-w-3xl mx-auto mt-2">
             <Textarea

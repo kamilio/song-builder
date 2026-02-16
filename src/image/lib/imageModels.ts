@@ -12,4 +12,9 @@ export const IMAGE_MODELS: ImageModelDef[] = [
     supportsRemix: false,
     extraBody: { image_only: true },
   },
+  {
+    id: "remix-turbo",
+    label: "Remix Turbo",
+    supportsRemix: true,
+  },
 ];
