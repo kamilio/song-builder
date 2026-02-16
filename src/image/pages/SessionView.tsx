@@ -94,6 +94,7 @@ import type { ImageModelDef } from "@/image/lib/imageModels";
 import { ModelMultiSelect } from "@/image/components/ModelMultiSelect";
 import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 import { FullscreenImageViewer } from "@/image/components/FullscreenImageViewer";
+import { FileDropzone } from "@/shared/components/FileDropzone";
 
 // ─── Download helper (US-023) ──────────────────────────────────────────────
 
@@ -1310,29 +1311,20 @@ export default function SessionView() {
                 data-testid="model-picker"
               />
             </div>
-            {/* Remix image upload (US-006): shown when any selected model supports remix */}
+            {/* Remix image upload (US-006 / US-029): shown when any selected model supports remix */}
             {selectedModels.some((m) => m.supportsRemix) && (
               <div className="flex items-center gap-2">
-                <label
-                  htmlFor="remix-image-upload"
-                  className="text-xs text-muted-foreground whitespace-nowrap shrink-0"
-                >
+                <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
                   Reference image
-                </label>
-                <input
-                  id="remix-image-upload"
-                  type="file"
+                </span>
+                <FileDropzone
+                  file={remixFile}
+                  onFileChange={setRemixFile}
                   accept="image/jpeg,image/png"
-                  onChange={(e) => setRemixFile(e.target.files?.[0] ?? null)}
-                  className="text-xs"
-                  data-testid="remix-image-upload"
-                  aria-label="Reference image for remix"
+                  label="Drag &amp; drop or click to attach"
+                  testId="remix-image-upload"
+                  disabled={isGenerating}
                 />
-                {remixFile && (
-                  <span className="text-xs text-muted-foreground truncate max-w-[180px]" data-testid="remix-file-name">
-                    {remixFile.name}
-                  </span>
-                )}
               </div>
             )}
           </div>

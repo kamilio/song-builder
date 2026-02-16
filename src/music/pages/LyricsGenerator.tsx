@@ -39,6 +39,7 @@ import { ApiKeyMissingModal } from "@/shared/components/ApiKeyMissingModal";
 import { LyricsItemCard } from "@/music/components/LyricsItemCard";
 import { Toast, useToast } from "@/shared/components/Toast";
 import { useApiKeyGuard } from "@/shared/hooks/useApiKeyGuard";
+import { FileDropzone } from "@/shared/components/FileDropzone";
 import {
   createMessage,
   getMessage,
@@ -280,6 +281,8 @@ export default function LyricsGenerator() {
   const isMobile = useIsMobile();
 
   const [userInput, setUserInput] = useState("");
+  // US-029: File attachment for the chat input.
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   // Refresh counter: incrementing it causes message to be re-read from storage.
   const [refreshCount, setRefreshCount] = useState(0);
@@ -428,18 +431,27 @@ export default function LyricsGenerator() {
   );
 
   const handleSubmitCore = useCallback(
-    async (trimmed: string) => {
+    async (trimmed: string, fileAttachment: File | null) => {
       setIsLoading(true);
+      // Clear the attached file immediately after submission.
+      setAttachedFile(null);
 
       // Determine the parentId for the new user message.
       // If there is a current message, the user message is a child of it.
       // If this is /lyrics/new, start a new root message.
       const parentId = id && currentMessage ? id : null;
 
+      // US-029: If a file is attached, append a note to the message content
+      // so the LLM has context about the attachment.
+      const content =
+        fileAttachment
+          ? `${trimmed}\n\n[Attached file: ${fileAttachment.name}]`
+          : trimmed;
+
       // Create the user message first.
       const userMsg = createMessage({
         role: "user",
-        content: trimmed,
+        content,
         parentId,
       });
 
@@ -459,7 +471,7 @@ export default function LyricsGenerator() {
             role: m.role as "user" | "assistant",
             content: m.content,
           })),
-          { role: "user" as const, content: trimmed },
+          { role: "user" as const, content },
         ];
 
         const settings = getSettings();
@@ -499,10 +511,11 @@ export default function LyricsGenerator() {
       e.preventDefault();
       const trimmed = userInput.trim();
       if (!trimmed || isLoading) return;
-      // Capture trimmed so the deferred action uses the same input text.
-      guardAction(() => void handleSubmitCore(trimmed));
+      // Capture trimmed and attachedFile so the deferred action uses the same values.
+      const fileSnapshot = attachedFile;
+      guardAction(() => void handleSubmitCore(trimmed, fileSnapshot));
     },
-    [userInput, isLoading, guardAction, handleSubmitCore]
+    [userInput, isLoading, attachedFile, guardAction, handleSubmitCore]
   );
 
   function handleGenerateSongs() {
@@ -689,28 +702,38 @@ export default function LyricsGenerator() {
   const ChatForm = (
     <form
       onSubmit={handleSubmit}
-      className="flex gap-2 items-end"
+      className="flex flex-col gap-1.5"
       data-testid="chat-form"
     >
-      <textarea
-        value={userInput}
-        onChange={(e) => setUserInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSubmit(e as unknown as React.FormEvent);
-          }
-        }}
-        placeholder="Type a message… (Shift+Enter for newline)"
-        aria-label="Chat message"
+      <div className="flex gap-2 items-end">
+        <textarea
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit(e as unknown as React.FormEvent);
+            }
+          }}
+          placeholder="Type a message… (Shift+Enter for newline)"
+          aria-label="Chat message"
+          disabled={isLoading}
+          rows={3}
+          className="flex-1 border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 resize-none"
+          data-testid="chat-input"
+        />
+        <Button type="submit" disabled={isLoading} data-testid="chat-submit" className="min-h-[44px]">
+          {isLoading ? "Sending…" : "Send"}
+        </Button>
+      </div>
+      {/* US-029: File attachment dropzone rendered inline below the textarea */}
+      <FileDropzone
+        file={attachedFile}
+        onFileChange={setAttachedFile}
+        label="Attach file"
+        testId="chat-file-dropzone"
         disabled={isLoading}
-        rows={3}
-        className="flex-1 border rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 resize-none"
-        data-testid="chat-input"
       />
-      <Button type="submit" disabled={isLoading} data-testid="chat-submit" className="min-h-[44px]">
-        {isLoading ? "Sending…" : "Send"}
-      </Button>
     </form>
   );
 
