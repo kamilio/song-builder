@@ -122,7 +122,7 @@ function PageLayout({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/song-builder">
       <RouteLogger />
       <Routes>
         {/* Root — shared landing with Music/Image tab switcher */}
