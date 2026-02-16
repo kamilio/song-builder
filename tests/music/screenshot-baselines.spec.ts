@@ -102,10 +102,10 @@ test(
     await gotoSeeded(page, "/music/lyrics", multiEntryFixture);
 
     await expect(
-      page.getByRole("heading", { name: "Lyrics List" })
+      page.getByRole("heading", { name: "Lyrics" })
     ).toBeVisible();
     await expect(
-      page.getByRole("cell", { name: "Morning Pop", exact: true })
+      page.getByTestId("card-title").filter({ hasText: "Morning Pop" }).first()
     ).toBeVisible();
 
     await expect(page).toHaveScreenshot("lyrics-list-desktop.png", {
@@ -122,12 +122,11 @@ test(
     await gotoSeeded(page, "/music/lyrics", multiEntryFixture);
 
     await expect(
-      page.getByRole("heading", { name: "Lyrics List" })
+      page.getByRole("heading", { name: "Lyrics" })
     ).toBeVisible();
-    // Style column hidden at mobile width
     await expect(
-      page.getByRole("columnheader", { name: "Style" })
-    ).toBeHidden();
+      page.getByTestId("lyrics-list-item").first()
+    ).toBeVisible();
 
     await expect(page).toHaveScreenshot("lyrics-list-mobile.png", {
       fullPage: true,
