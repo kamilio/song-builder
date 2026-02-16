@@ -1,4 +1,4 @@
-import { useState, useRef, type ChangeEvent, type FormEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getSettings,
@@ -33,6 +33,52 @@ export default function Settings() {
   const [importError, setImportError] = useState("");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Chat model list fetched from POE V1 API
+  const [chatModels, setChatModels] = useState<{ id: string; label: string }[]>([]);
+  const [chatModelError, setChatModelError] = useState("");
+
+  useEffect(() => {
+    if (!apiKey) return;
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    let cancelled = false;
+    fetch("https://api.poe.com/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<{
+          data: Array<{
+            id: string;
+            created: number;
+            price_per_input_token?: number;
+          }>;
+        }>;
+      })
+      .then((body) => {
+        if (cancelled) return;
+        const filtered = (body.data ?? [])
+          .filter((m) => {
+            const createdAt = new Date(m.created * 1000);
+            const pricePerMillion = (m.price_per_input_token ?? 0) * 1_000_000;
+            return createdAt >= sixMonthsAgo && pricePerMillion < 2.0;
+          })
+          .map((m) => ({ id: m.id, label: m.id }));
+        setChatModels(filtered);
+        setChatModelError("");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setChatModelError("Failed to load models. Your saved model is preserved.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey]);
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -139,6 +185,30 @@ export default function Settings() {
               className="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
+
+          {apiKey && (
+            <div className="space-y-1.5">
+              <label htmlFor="chatModel" className="text-sm font-medium">
+                Chat model
+              </label>
+              {chatModelError ? (
+                <p className="text-sm text-destructive" role="alert" data-testid="chat-model-error">
+                  {chatModelError}
+                </p>
+              ) : chatModels.length > 0 ? (
+                <select
+                  id="chatModel"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {chatModels.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+          )}
         </div>
 
         <div className="rounded-lg border bg-card p-5 space-y-4">
