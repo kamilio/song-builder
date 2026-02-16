@@ -104,7 +104,7 @@ export default function SongGenerator() {
   const messageId = routeId ?? searchParams.get("messageId");
 
   const navigate = useNavigate();
-  const { isModalOpen, guardAction, closeModal } = useApiKeyGuard();
+  const { isModalOpen, guardAction, closeModal, proceedWithPendingAction } = useApiKeyGuard();
 
   // Derive message from storage on every render; re-derives when messageId changes.
   const message = useMemo(
@@ -149,9 +149,7 @@ export default function SongGenerator() {
     return [...storedSongs, ...uniqueNew];
   }, [storedSongs, newSongs]);
 
-  const handleGenerate = useCallback(async () => {
-    // API key guard must run first so the modal appears even without a message.
-    if (!guardAction()) return;
+  const handleGenerateCore = useCallback(async () => {
     if (isGenerating) return;
     if (!messageId || !message) return;
 
@@ -213,7 +211,12 @@ export default function SongGenerator() {
     setIsGenerating(false);
     // Clear slots now that all have resolved; the persisted songs list shows the results.
     setSlots(new Map());
-  }, [messageId, message, isGenerating, guardAction]);
+  }, [messageId, message, isGenerating]);
+
+  const handleGenerate = useCallback(() => {
+    // API key guard must run first so the modal appears even without a message.
+    guardAction(() => void handleGenerateCore());
+  }, [guardAction, handleGenerateCore]);
 
   // Auto-trigger generation only when ?generate=true is present in the URL.
   // The param is consumed immediately (replaced out of the URL) so a page
@@ -410,7 +413,7 @@ export default function SongGenerator() {
         )
       )}
 
-      {isModalOpen && <ApiKeyMissingModal onClose={closeModal} />}
+      {isModalOpen && <ApiKeyMissingModal onClose={closeModal} onProceed={proceedWithPendingAction} />}
 
       {pendingDeleteSong !== null && (
         <ConfirmDialog

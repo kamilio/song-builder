@@ -675,8 +675,8 @@ export default function SessionView() {
     }
   }, [selectedModel]);
 
-  // API key guard (US-020): shows ApiKeyMissingModal when poeApiKey is absent.
-  const { isModalOpen: isApiKeyModalOpen, guardAction, closeModal: closeApiKeyModal } = useApiKeyGuard();
+  // API key guard (US-020/US-023): shows ApiKeyMissingModal when poeApiKey is absent.
+  const { isModalOpen: isApiKeyModalOpen, guardAction, closeModal: closeApiKeyModal, proceedWithPendingAction: proceedApiKey } = useApiKeyGuard();
 
   // Used to ignore stale setState calls if the component unmounts mid-flight.
   const isMounted = useRef(true);
@@ -733,10 +733,8 @@ export default function SessionView() {
     }
   }, [id]);
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerateCore = useCallback(async () => {
     if (isGenerating) return;
-    // Guard: show modal and abort if no API key is configured (US-020).
-    if (!guardAction()) return;
     const trimmed = prompt.trim();
     if (!trimmed || !id || !data) return;
 
@@ -834,7 +832,12 @@ export default function SessionView() {
         setIsGenerating(false);
       }
     }
-  }, [id, data, prompt, isGenerating, guardAction, selectedModel, remixFile]);
+  }, [id, data, prompt, isGenerating, selectedModel, remixFile]);
+
+  const handleGenerate = useCallback(() => {
+    // Guard: show modal and abort if no API key is configured (US-020/US-023).
+    guardAction(() => void handleGenerateCore());
+  }, [guardAction, handleGenerateCore]);
 
   /**
    * US-007: Retries a single failed image slot by index.
@@ -1089,7 +1092,7 @@ export default function SessionView() {
         </div>
       </div>
     </div>
-    {isApiKeyModalOpen && <ApiKeyMissingModal onClose={closeApiKeyModal} />}
+    {isApiKeyModalOpen && <ApiKeyMissingModal onClose={closeApiKeyModal} onProceed={proceedApiKey} />}
     </>
   );
 }

@@ -274,7 +274,7 @@ function useIsMobile(): boolean {
 export default function LyricsGenerator() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isModalOpen, guardAction, closeModal } = useApiKeyGuard();
+  const { isModalOpen, guardAction, closeModal, proceedWithPendingAction } = useApiKeyGuard();
   const isMobile = useIsMobile();
 
   const [userInput, setUserInput] = useState("");
@@ -341,11 +341,8 @@ export default function LyricsGenerator() {
 
     const ancestors = getAncestors(id);
 
-    const doSend = async () => {
-      if (!guardAction()) {
-        setIsLoading(false);
-        return;
-      }
+    const doAutoSend = async () => {
+      setIsLoading(true);
       try {
         const history: LLMChatMessage[] = [
           { role: "system" as const, content: LYRICS_SYSTEM_PROMPT },
@@ -376,7 +373,11 @@ export default function LyricsGenerator() {
       }
     };
 
-    doSend();
+    const hasKey = guardAction(() => void doAutoSend());
+    if (!hasKey) {
+      // No key: modal will show; clear the spinner that was set above
+      setIsLoading(false);
+    }
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll chat to bottom when ancestor path grows.
@@ -423,13 +424,8 @@ export default function LyricsGenerator() {
     [latestAssistant]
   );
 
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      const trimmed = userInput.trim();
-      if (!trimmed || isLoading) return;
-      if (!guardAction()) return;
-
+  const handleSubmitCore = useCallback(
+    async (trimmed: string) => {
       setIsLoading(true);
 
       // Determine the parentId for the new user message.
@@ -491,7 +487,18 @@ export default function LyricsGenerator() {
         if (id) setRefreshCount((c) => c + 1);
       }
     },
-    [userInput, id, currentMessage, ancestorPath, isLoading, guardAction, navigate, showErrorToast]
+    [id, currentMessage, ancestorPath, navigate, showErrorToast]
+  );
+
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = userInput.trim();
+      if (!trimmed || isLoading) return;
+      // Capture trimmed so the deferred action uses the same input text.
+      guardAction(() => void handleSubmitCore(trimmed));
+    },
+    [userInput, isLoading, guardAction, handleSubmitCore]
   );
 
   function handleGenerateSongs() {
@@ -854,7 +861,7 @@ export default function LyricsGenerator() {
         </Button>
       </div>
 
-      {isModalOpen && <ApiKeyMissingModal onClose={closeModal} />}
+      {isModalOpen && <ApiKeyMissingModal onClose={closeModal} onProceed={proceedWithPendingAction} />}
       <Toast toast={errorToast} onDismiss={() => showErrorToast(null)} />
     </div>
   );

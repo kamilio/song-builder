@@ -1,11 +1,12 @@
 /**
- * Tests for US-007: API key missing modal.
+ * Tests for US-023: Blocking API key modal with inline error states.
  *
  * Verifies that:
  * - Modal appears when POE_API_KEY is absent and user submits a chat message
  * - Modal appears when POE_API_KEY is absent and user triggers song generation
  * - No API request is made while the modal is shown
- * - Modal contains a link/button to navigate to Settings
+ * - Modal contains an inline API key input (not a link to Settings)
+ * - Cancel button dismisses the modal without proceeding
  * - When API key IS present, modal is NOT shown
  *
  * State is seeded via storageService.import() — the same code path as the
@@ -32,7 +33,7 @@ test.describe("API key missing modal — Lyrics Generator", () => {
     ).toBeVisible();
   });
 
-  test("modal contains a link to Settings", async ({ page }) => {
+  test("modal contains an inline API key input (not a link to Settings)", async ({ page }) => {
     await seedFixture(page, noApiKeyFixture);
     await page.goto("/music/lyrics/new");
 
@@ -40,20 +41,19 @@ test.describe("API key missing modal — Lyrics Generator", () => {
     await page.getByTestId("chat-submit").click();
 
     await expect(page.getByTestId("api-key-missing-modal")).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Go to Settings" })
-    ).toBeVisible();
+    await expect(page.getByTestId("api-key-input")).toBeVisible();
+    await expect(page.getByTestId("api-key-save-btn")).toBeVisible();
   });
 
-  test("clicking Go to Settings navigates to /settings", async ({ page }) => {
+  test("Save & Continue button is disabled when input is empty", async ({ page }) => {
     await seedFixture(page, noApiKeyFixture);
     await page.goto("/music/lyrics/new");
 
     await page.getByTestId("chat-input").fill("test");
     await page.getByTestId("chat-submit").click();
 
-    await page.getByRole("link", { name: "Go to Settings" }).click();
-    await expect(page).toHaveURL(/\/settings/);
+    await expect(page.getByTestId("api-key-missing-modal")).toBeVisible();
+    await expect(page.getByTestId("api-key-save-btn")).toBeDisabled();
   });
 
   test("modal does NOT appear when API key is present", async ({ page }) => {
@@ -84,7 +84,7 @@ test.describe("API key missing modal — Song Generator", () => {
     page,
   }) => {
     await seedFixture(page, noApiKeyFixture);
-    await page.goto("/music/songs");
+    await page.goto("/music/lyrics/fixture-msg-nokey-a/songs");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -94,21 +94,20 @@ test.describe("API key missing modal — Song Generator", () => {
     ).toBeVisible();
   });
 
-  test("modal contains a link to Settings", async ({ page }) => {
+  test("modal contains an inline API key input", async ({ page }) => {
     await seedFixture(page, noApiKeyFixture);
-    await page.goto("/music/songs");
+    await page.goto("/music/lyrics/fixture-msg-nokey-a/songs");
 
     await page.getByTestId("generate-songs-btn").click();
 
     await expect(page.getByTestId("api-key-missing-modal")).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Go to Settings" })
-    ).toBeVisible();
+    await expect(page.getByTestId("api-key-input")).toBeVisible();
+    await expect(page.getByTestId("api-key-save-btn")).toBeVisible();
   });
 
   test("modal does NOT appear when API key is present", async ({ page }) => {
     await seedFixture(page, baseFixture);
-    await page.goto("/music/songs");
+    await page.goto("/music/lyrics/fixture-msg-1a/songs");
 
     await page.getByTestId("generate-songs-btn").click();
 
@@ -117,7 +116,7 @@ test.describe("API key missing modal — Song Generator", () => {
 
   test("Cancel button closes the modal", async ({ page }) => {
     await seedFixture(page, noApiKeyFixture);
-    await page.goto("/music/songs");
+    await page.goto("/music/lyrics/fixture-msg-nokey-a/songs");
 
     await page.getByTestId("generate-songs-btn").click();
 
