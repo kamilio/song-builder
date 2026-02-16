@@ -78,7 +78,8 @@ import { imageStorageService } from "@/image/lib/storage";
 import type { ImageSession, ImageGeneration, ImageItem } from "@/image/lib/storage";
 import { createLLMClient } from "@/shared/lib/llm/factory";
 import { getSettings } from "@/music/lib/storage/storageService";
-import { log, getAll } from "@/music/lib/actionLog";
+import { log } from "@/music/lib/actionLog";
+import { useReportBug } from "@/shared/hooks/useReportBug";
 import { IMAGE_MODELS } from "@/image/lib/imageModels";
 import { downloadBlob } from "@/shared/lib/downloadBlob";
 import type { ImageModelDef } from "@/image/lib/imageModels";
@@ -147,19 +148,10 @@ const IMAGE_NAV_ITEMS: MenuItem[] = [
   },
 ];
 
-async function handleImageReportBug() {
-  log({
-    category: "user:action",
-    action: "report:bug",
-    data: {},
-  });
-  const entries = getAll();
-  await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
-}
-
 // ─── TopBar ────────────────────────────────────────────────────────────────
 
 function TopBar() {
+  const { handleReportBug } = useReportBug();
   return (
     <header
       className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b bg-background/95 backdrop-blur-sm gap-4"
@@ -176,7 +168,7 @@ function TopBar() {
         <span className="font-semibold text-sm hidden sm:inline">Image Generator</span>
       </Link>
 
-      <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleImageReportBug} />
+      <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleReportBug} />
     </header>
   );
 }

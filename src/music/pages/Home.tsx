@@ -7,7 +7,7 @@ import { LyricsItemCard } from "@/music/components/LyricsItemCard";
 import { storageService } from "@/music/lib/storage";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
-import { log, getAll } from "@/music/lib/actionLog";
+import { useReportBug } from "@/shared/hooks/useReportBug";
 
 const HOME_NAV_ITEMS: MenuItem[] = [
   {
@@ -36,16 +36,6 @@ const HOME_NAV_ITEMS: MenuItem[] = [
   },
 ];
 
-async function handleHomeReportBug() {
-  log({
-    category: "user:action",
-    action: "report:bug",
-    data: {},
-  });
-  const entries = getAll();
-  await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
-}
-
 const EXAMPLE_PROMPTS = [
   "A melancholy indie folk song about missing someone on a rainy day",
   "An upbeat pop anthem about chasing your dreams in a new city",
@@ -56,6 +46,7 @@ const EXAMPLE_PROMPTS = [
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const navigate = useNavigate();
+  const { handleReportBug } = useReportBug();
 
   // Load the 2 most recent assistant lyrics for returning users.
   const recentLyrics = storageService
@@ -84,7 +75,7 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col items-center p-6 pt-20 pb-16 bg-gradient-to-b from-background to-secondary/30">
       <div className="fixed top-4 right-4 z-40">
-        <NavMenu items={HOME_NAV_ITEMS} onReportBug={handleHomeReportBug} />
+        <NavMenu items={HOME_NAV_ITEMS} onReportBug={handleReportBug} />
       </div>
       {/* Logo + wordmark */}
       <div className="mb-10 flex flex-col items-center gap-3 text-center">

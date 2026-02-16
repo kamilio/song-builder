@@ -16,7 +16,8 @@ import LyricsGenerator from "@/music/pages/LyricsGenerator";
 import SongGenerator from "@/music/pages/SongGenerator";
 import PinnedSongs from "@/music/pages/PinnedSongs";
 import Settings from "@/music/pages/Settings";
-import { log, getAll } from "@/music/lib/actionLog";
+import { log } from "@/music/lib/actionLog";
+import { useReportBug } from "@/shared/hooks/useReportBug";
 
 /**
  * Logs every route change to the in-memory action log.
@@ -61,16 +62,6 @@ const MUSIC_NAV_ITEMS: MenuItem[] = [
   },
 ];
 
-async function handleMusicReportBug() {
-  log({
-    category: "user:action",
-    action: "report:bug",
-    data: {},
-  });
-  const entries = getAll();
-  await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
-}
-
 /**
  * Top bar shown on every page except Home.
  *
@@ -79,6 +70,7 @@ async function handleMusicReportBug() {
  * Right: circular NavMenu button
  */
 function TopBar() {
+  const { handleReportBug } = useReportBug();
   return (
     <header
       className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b bg-background/95 backdrop-blur-sm gap-4"
@@ -102,7 +94,7 @@ function TopBar() {
       </div>
 
       {/* Navigation menu */}
-      <NavMenu items={MUSIC_NAV_ITEMS} onReportBug={handleMusicReportBug} />
+      <NavMenu items={MUSIC_NAV_ITEMS} onReportBug={handleReportBug} />
     </header>
   );
 }

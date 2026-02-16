@@ -6,7 +6,7 @@ import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
 import { imageStorageService } from "@/image/lib/storage";
-import { log, getAll } from "@/music/lib/actionLog";
+import { useReportBug } from "@/shared/hooks/useReportBug";
 
 const IMAGE_NAV_ITEMS: MenuItem[] = [
   {
@@ -35,16 +35,6 @@ const IMAGE_NAV_ITEMS: MenuItem[] = [
   },
 ];
 
-async function handleImageReportBug() {
-  log({
-    category: "user:action",
-    action: "report:bug",
-    data: {},
-  });
-  const entries = getAll();
-  await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
-}
-
 const EXAMPLE_PROMPTS = [
   "A serene mountain landscape at golden hour with misty valleys",
   "A futuristic cityscape at night with neon reflections on wet streets",
@@ -56,6 +46,7 @@ export default function ImageHome() {
   const [prompt, setPrompt] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
+  const { handleReportBug } = useReportBug();
 
   // Load the 2 most recent sessions for returning users.
   const recentSessions = imageStorageService
@@ -83,7 +74,7 @@ export default function ImageHome() {
   return (
     <div className="min-h-screen flex flex-col items-center p-6 pt-20 pb-16 bg-gradient-to-b from-background to-secondary/30">
       <div className="fixed top-4 right-4 z-40">
-        <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleImageReportBug} />
+        <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleReportBug} />
       </div>
 
       {/* Hero icon + title */}
