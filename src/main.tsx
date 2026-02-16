@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App";
+import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { storageService } from "@/music/lib/storage";
 import { getAll as getActionLog } from "@/music/lib/actionLog";
 import { imageStorageService } from "@/image/lib/storage";
@@ -23,6 +24,8 @@ if (!rootEl) throw new Error("Root element not found");
 
 createRoot(rootEl).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>
 );
