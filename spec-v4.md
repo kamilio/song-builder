@@ -1,0 +1,40 @@
+- song - lyrics - the chat input should be sticky
+- the main landing page is weird - we need to rebrand to "Studio", also the left button is black and right is white, they should be equal
+- clicking the logo navigates to the master landing page (root /) from anywhere in the app
+- settings are Music -> POE API Key, it's a global for everything, also it says song builder, rebrand to "Studio"
+- the session card e.g. on <http://localhost:5174/image/sessions> should show mini preview of images, so they barely fit into the card, show as many as fit, newest first; also show the number of generated images (and number of pinned)
+- session list - add sort by (newest first, oldest first, most images, most pinned)
+- the loading placeholders should show a per-image spinner (images) and per-song spinner (lyrics) with seconds elapsed; disappears immediately when done
+- session view - Add regenerate for each image, outside of the main generate, it's kind of convenient when one of the images is bad; regenerating adds a new item alongside the old one (no separate history concept — old images stay in place)
+  - the buttons should have some hover effect
+- fullscreen view of images, triggered by clicking the image, left and right navigation between images, two different lists
+  - all: navigate through every image in the session (including regenerated ones)
+  - current: limited to the most recent generation only
+  - keyboard arrow navigation supported; close via ESC or click outside
+- uploading - should have a nice dropzone and attachment should be nicely rendered as being part of the input; implement as a reusable pattern applied to both image and lyrics inputs
+- visual hierarchy
+  - new session button should be located in the top right corner menu area
+  - new lyrics button as well
+- images - multimodel, ability to select multiple models, results will be rendered inside the main pane with top right badge identifying model, 3 per model by default (configurable in settings, free input, no min/max)
+  - selector - use shadcn multi select component, and make sure it looks good
+- songs - when in lyrics mode, show the count of already generated songs; clicking navigates to the songs list filtered to that lyric; only shown if songs exist, otherwise hidden
+- song builder - pinned songs view has a pinned filter on by default, add a "clear filter" button to show all songs
+- report bug should be only visible in development mode (figure out appropriate check e.g. NODE_ENV or similar)
+- add modal for api key, whenever requested, it should open blocking modal, so we don't interrupt the whole flow, verify api key via GET <https://api.poe.com/usage/current_balance>
+  - error states should be handled gracefully: invalid key, network error, expired key — show clear inline feedback in the modal (not a toast), let the user correct and retry without dismissing; figure out what the API returns for each case and tailor the message (e.g. "Invalid API key — double-check you copied the full key")
+- show remaining balance in USD or points whatever is available in GET <https://api.poe.com/usage/current_balance> next to the top right menu, compact and nice, format it as 1K, 7K, 1M, 100K
+  - while fetching, show the last known value or nothing — never a spinner or loader
+  - fetch new balance after every LLM request (text, lyrics, and image generation), make this architecturally sound
+- lyrics should have sort options: newest first, oldest first, most generated, most pinned
+- BUG - when running longer prompt from landing page, it gets trimmed (investigate root cause, likely a truncation somewhere in the submit handler or navigation)
+- BUG - when this happens `Image failed nano-banana returned an empty response` - there should be a retry button
+- export/backup should cover everything — music and image data, not just music
+- add React error boundary — unhandled errors should show a recovery UI instead of a blank screen
+- handle localStorage quota exceeded gracefully — show a clear message when storage is full instead of silently failing
+- refactor: consolidate duplicated NavMenu, Toast, Button components (currently exist in both music/components and shared/components)
+- refactor: extract shared download blob logic (duplicated between SongGenerator and PinnedSongs)
+- refactor: extract shared report bug handler (currently copy-pasted into 5 files)
+- delete confirmation for songs, lyrics, and images — no instant deletion, always confirm first
+- sessions list should have search, consistent with lyrics list
+- BUG - deleting a session on All Sessions page doesn't refresh the list, requires navigating away and back
+- BUG - settings fetches available POE models on every API key keystroke; should fetch once ever and cache the result in localStorage, never re-fetch unless manually invalidated
