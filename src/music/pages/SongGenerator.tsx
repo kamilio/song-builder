@@ -23,7 +23,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Zap, Music } from "lucide-react";
+import { Loader2, Zap, Music } from "lucide-react";
+import { useElapsedTimer } from "@/shared/hooks/useElapsedTimer";
 import { Button } from "@/shared/components/ui/button";
 import { ApiKeyMissingModal } from "@/shared/components/ApiKeyMissingModal";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
@@ -59,6 +60,41 @@ interface SongState {
   song: Song | null;
   /** Error message if generation failed for this slot. */
   error: string | null;
+}
+
+/**
+ * Skeleton shown inside a song slot while generation is in-flight (US-021).
+ * Mimics the shape of a SongItem card with placeholder bars, a spinning icon,
+ * and an elapsed-seconds counter so users know how long generation is taking.
+ */
+function SongLoadingSkeleton({ index }: { index: number }) {
+  const elapsed = useElapsedTimer(true);
+
+  return (
+    <div
+      className="animate-pulse"
+      data-testid={`song-loading-${index}`}
+      aria-label={`Generating song ${index + 1}… ${elapsed}s`}
+      role="status"
+    >
+      {/* Skeleton mimicking the shape of a SongItem card */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="h-4 w-1/3 rounded bg-muted" />
+        <div className="flex gap-2">
+          <div className="h-7 w-12 rounded bg-muted" />
+          <div className="h-7 w-16 rounded bg-muted" />
+          <div className="h-7 w-14 rounded bg-muted" />
+        </div>
+      </div>
+      <div className="h-8 w-full rounded bg-muted" />
+      <div className="flex items-center gap-2 mt-3">
+        <Loader2 className="h-4 w-4 text-muted-foreground/60 animate-spin" />
+        <span className="text-xs text-muted-foreground/60 tabular-nums" data-testid={`song-elapsed-${index}`}>
+          {elapsed}s
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export default function SongGenerator() {
@@ -327,23 +363,7 @@ export default function SongGenerator() {
               data-testid={`song-slot-${index}`}
             >
               {state.loading ? (
-                <div
-                  className="animate-pulse"
-                  data-testid={`song-loading-${index}`}
-                  aria-label={`Generating song ${index + 1}…`}
-                  role="status"
-                >
-                  {/* Skeleton mimicking the shape of a SongItem card */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="h-4 w-1/3 rounded bg-muted" />
-                    <div className="flex gap-2">
-                      <div className="h-7 w-12 rounded bg-muted" />
-                      <div className="h-7 w-16 rounded bg-muted" />
-                      <div className="h-7 w-14 rounded bg-muted" />
-                    </div>
-                  </div>
-                  <div className="h-8 w-full rounded bg-muted" />
-                </div>
+                <SongLoadingSkeleton index={index} />
               ) : state.error ? (
                 <p className="text-sm text-destructive" data-testid={`song-error-${index}`}>
                   Error: {state.error}

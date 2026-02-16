@@ -67,7 +67,8 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ImageIcon, LayoutList, Pin, PinOff, Settings, Bug, Download, RefreshCw } from "lucide-react";
+import { ImageIcon, LayoutList, Loader2, Pin, PinOff, Settings, Bug, Download, RefreshCw } from "lucide-react";
+import { useElapsedTimer } from "@/shared/hooks/useElapsedTimer";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
@@ -315,18 +316,27 @@ function ThumbnailStrip({ generations, items }: ThumbnailPanelProps) {
 /**
  * A placeholder card shown while a generation is in-flight (US-021).
  * Matches the aspect ratio and size of real image cards (square, 320px).
+ * Shows a spinning icon and an elapsed-seconds counter while in-flight.
  */
 function SkeletonCard() {
+  const elapsed = useElapsedTimer(true);
+
   return (
     <div
-      className="rounded-lg overflow-hidden border bg-card shadow-sm animate-pulse"
+      className="rounded-lg overflow-hidden border bg-card shadow-sm animate-pulse relative"
       data-testid="skeleton-card"
-      aria-hidden="true"
+      role="status"
+      aria-label={`Generating image… ${elapsed}s`}
     >
       <div
-        className="bg-muted"
+        className="bg-muted flex flex-col items-center justify-center gap-2"
         style={{ width: "320px", height: "320px" }}
-      />
+      >
+        <Loader2 className="h-8 w-8 text-muted-foreground/60 animate-spin" />
+        <span className="text-sm text-muted-foreground/60 font-medium tabular-nums" data-testid="skeleton-elapsed">
+          {elapsed}s
+        </span>
+      </div>
     </div>
   );
 }
