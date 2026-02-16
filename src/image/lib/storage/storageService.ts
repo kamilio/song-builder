@@ -171,7 +171,7 @@ export function saveImageSettings(settings: ImageSettings): void {
 /**
  * Remove all song-builder:image-* localStorage keys.
  */
-function resetImageStorage(): void {
+export function resetImageStorage(): void {
   const prefix = "song-builder:image-";
   const keysToRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
@@ -185,7 +185,7 @@ function resetImageStorage(): void {
 
 // ─── Import / Export ──────────────────────────────────────────────────────────
 
-function exportImageStorage(): ImageStorageExport {
+export function exportImageStorage(): ImageStorageExport {
   return {
     sessions: getSessions(),
     generations: getGenerations(),
@@ -194,7 +194,7 @@ function exportImageStorage(): ImageStorageExport {
   };
 }
 
-function importImageStorage(data: ImageStorageExport): void {
+export function importImageStorage(data: ImageStorageExport): void {
   if (Array.isArray(data.sessions)) {
     writeJSON(KEYS.sessions, data.sessions);
   }

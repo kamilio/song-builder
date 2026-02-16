@@ -1,12 +1,15 @@
 /**
  * Tests for US-006: Settings page.
+ * Tests for US-030: Export and backup covers all data.
  *
  * Verifies that:
  * - POE_API_KEY input saves to localStorage on submit and is pre-filled on reload
  * - numSongs input saves to localStorage on submit
- * - Export button downloads JSON data
+ * - Export button downloads JSON data (music + image combined)
+ * - Export filename uses "studio-backup-<date>.json" branding
  * - "Include API key in export" checkbox controls poeApiKey presence in export
- * - Import button accepts a JSON file and restores all seeded data
+ * - Import button accepts a JSON file and restores all seeded data (music + image)
+ * - Reset action clears both music and image data
  * - Screenshot test with seeded fixture data
  *
  * State is seeded via storageService.import() — the same code path as the
@@ -18,8 +21,10 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import { seedFixture } from "./helpers/seed";
+import { seedImageFixture } from "../image/helpers/seed";
 import { screenshotPage } from "./helpers/screenshot";
 import { baseFixture, emptyFixture } from "../fixtures/index";
+import { imageBaseFixture } from "../fixtures/index";
 
 test.describe("Settings page", () => {
   test.beforeEach(async ({ page }) => {
@@ -70,7 +75,7 @@ test.describe("Settings page", () => {
 });
 
 test.describe("Settings: export / import", () => {
-  test("export → import round-trip restores all seeded data", async ({ page }) => {
+  test("export → import round-trip restores all seeded music data", async ({ page }) => {
     // Seed base fixture (has entry + song + settings)
     await seedFixture(page, baseFixture);
     await page.goto("/settings");
@@ -113,6 +118,59 @@ test.describe("Settings: export / import", () => {
 
     // Clean up temp file
     fs.unlinkSync(tmpFile);
+  });
+
+  test("export includes image data and import round-trip restores it", async ({ page }) => {
+    // Seed both music and image data
+    await seedFixture(page, baseFixture);
+    await seedImageFixture(page, imageBaseFixture, { navigate: false });
+    await page.goto("/settings");
+
+    await page.getByLabel("Include API key in export").check();
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export Data" }).click();
+    const download = await downloadPromise;
+
+    const tmpFile = path.join(os.tmpdir(), `export-image-${Date.now()}.json`);
+    await download.saveAs(tmpFile);
+
+    // Verify exported JSON contains image data
+    const content = JSON.parse(fs.readFileSync(tmpFile, "utf-8"));
+    expect(content.image).toBeDefined();
+    expect(Array.isArray(content.image.sessions)).toBe(true);
+    expect(content.image.sessions).toHaveLength(imageBaseFixture.sessions.length);
+    expect(Array.isArray(content.image.generations)).toBe(true);
+    expect(content.image.generations).toHaveLength(imageBaseFixture.generations.length);
+    expect(Array.isArray(content.image.items)).toBe(true);
+    expect(content.image.items).toHaveLength(imageBaseFixture.items.length);
+
+    // Wipe storage and re-import
+    await page.evaluate(() => localStorage.clear());
+
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles(tmpFile);
+    await page.waitForTimeout(200);
+
+    // Verify image data is restored
+    const restoredImage = await page.evaluate(() => window.imageStorageService.export());
+    expect(restoredImage.sessions).toHaveLength(imageBaseFixture.sessions.length);
+    expect(restoredImage.generations).toHaveLength(imageBaseFixture.generations.length);
+    expect(restoredImage.items).toHaveLength(imageBaseFixture.items.length);
+
+    fs.unlinkSync(tmpFile);
+  });
+
+  test("export filename uses studio-backup-<date> branding", async ({ page }) => {
+    await seedFixture(page, baseFixture);
+    await page.goto("/settings");
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export Data" }).click();
+    const download = await downloadPromise;
+
+    const suggestedFilename = download.suggestedFilename();
+    expect(suggestedFilename).toMatch(/^studio-backup-\d{4}-\d{2}-\d{2}\.json$/);
   });
 
   test("export without include API keys omits poeApiKey", async ({ page }) => {
@@ -158,6 +216,7 @@ test.describe("Settings: export / import", () => {
 test.describe("Settings: Reset Memory", () => {
   test.beforeEach(async ({ page }) => {
     await seedFixture(page, baseFixture);
+    await seedImageFixture(page, imageBaseFixture, { navigate: false });
     await page.goto("/settings");
   });
 
@@ -197,6 +256,21 @@ test.describe("Settings: Reset Memory", () => {
     await page.waitForURL("/");
 
     // localStorage should be empty
+    const allKeys = await page.evaluate(() => Object.keys(localStorage));
+    expect(allKeys).toHaveLength(0);
+  });
+
+  test("confirming reset clears image data", async ({ page }) => {
+    // Verify image data exists before reset
+    const beforeReset = await page.evaluate(() => window.imageStorageService.export());
+    expect(beforeReset.sessions.length).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: "Reset Memory" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Confirm Reset" }).click();
+    await page.waitForURL("/");
+
+    // All storage should be cleared
     const allKeys = await page.evaluate(() => Object.keys(localStorage));
     expect(allKeys).toHaveLength(0);
   });

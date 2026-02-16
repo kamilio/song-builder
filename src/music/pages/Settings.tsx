@@ -10,6 +10,9 @@ import {
 import {
   getImageSettings,
   saveImageSettings,
+  exportImageStorage,
+  importImageStorage,
+  resetImageStorage,
 } from "@/image/lib/storage/storageService";
 
 const MODELS_CACHE_KEY = "song-builder:poe-models";
@@ -141,16 +144,19 @@ export default function Settings() {
   }
 
   function handleExport() {
-    const data = exportStorage();
-    if (!includeApiKey && data.settings) {
-      data.settings = { ...data.settings, poeApiKey: "" };
+    const musicData = exportStorage();
+    if (!includeApiKey && musicData.settings) {
+      musicData.settings = { ...musicData.settings, poeApiKey: "" };
     }
-    const json = JSON.stringify(data, null, 2);
+    const imageData = exportImageStorage();
+    const combined = { ...musicData, image: imageData };
+    const json = JSON.stringify(combined, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "studio-export.json";
+    const date = new Date().toISOString().slice(0, 10);
+    a.download = `studio-backup-${date}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -161,6 +167,7 @@ export default function Settings() {
 
   function handleResetConfirm() {
     resetStorage();
+    resetImageStorage();
     localStorage.clear();
     navigate("/");
   }
@@ -173,6 +180,9 @@ export default function Settings() {
       try {
         const data = JSON.parse(event.target?.result as string);
         importStorage(data);
+        if (data.image) {
+          importImageStorage(data.image);
+        }
         // Refresh form fields from the newly imported settings
         const settings = getSettings();
         setApiKey(settings?.poeApiKey ?? "");
