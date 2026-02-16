@@ -1,6 +1,7 @@
 import type { LLMClient } from "./types";
 import { MockLLMClient } from "./mock-client";
 import { PoeLLMClient } from "./poe-client";
+import { LoggingLLMClient } from "./logging-client";
 
 /**
  * Returns the appropriate LLMClient for the current environment.
@@ -12,7 +13,7 @@ import { PoeLLMClient } from "./poe-client";
  */
 export function createLLMClient(apiKey?: string): LLMClient {
   if (import.meta.env.VITE_USE_MOCK_LLM === "true") {
-    return new MockLLMClient();
+    return new LoggingLLMClient(new MockLLMClient());
   }
 
   if (!apiKey) {
@@ -22,5 +23,5 @@ export function createLLMClient(apiKey?: string): LLMClient {
     );
   }
 
-  return new PoeLLMClient(apiKey);
+  return new LoggingLLMClient(new PoeLLMClient(apiKey));
 }

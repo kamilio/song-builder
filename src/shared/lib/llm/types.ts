@@ -25,6 +25,8 @@ export interface LLMClient {
    * Submit a text prompt to the image model and return an array of publicly-accessible image URLs.
    * @param prompt - text description of the desired image
    * @param count - number of images to generate in parallel (default 3)
+   * @param model - optional model id; falls back to implementation default when omitted
+   * @param extraBody - optional extra fields forwarded verbatim to the API request body
    */
-  generateImage(prompt: string, count?: number): Promise<string[]>;
+  generateImage(prompt: string, count?: number, model?: string, extraBody?: Record<string, unknown>): Promise<string[]>;
 }

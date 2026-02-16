@@ -141,11 +141,6 @@ export default function SongGenerator() {
 
     // Launch N concurrent generation requests.
     const promises = slotIds.map(async (slotId, i) => {
-      log({
-        category: "llm:request",
-        action: "llm:song:start",
-        data: { messageId, slotId, slotIndex: i },
-      });
       try {
         const audioUrl = await client.generateSong(prompt, musicLengthMs);
         const songNumber = i + 1;
@@ -153,12 +148,6 @@ export default function SongGenerator() {
           messageId,
           title: `${message.title || "Song"} (Take ${songNumber})`,
           audioUrl,
-        });
-
-        log({
-          category: "llm:response",
-          action: "llm:song:complete",
-          data: { messageId, slotId, songId: song.id },
         });
 
         // Update only this slot's entry in the Map — siblings are unaffected.
@@ -171,11 +160,6 @@ export default function SongGenerator() {
       } catch (err) {
         const errMsg =
           err instanceof Error ? err.message : "Generation failed";
-        log({
-          category: "llm:response",
-          action: "llm:song:error",
-          data: { messageId, slotId, error: errMsg },
-        });
         setSlots((prev) => {
           const next = new Map(prev);
           next.set(slotId, { loading: false, song: null, error: errMsg });
