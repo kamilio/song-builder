@@ -387,7 +387,7 @@ function ErrorCard({ message, onRetry, isRetrying }: { message: string; onRetry?
           disabled={isRetrying}
           aria-label="Retry image generation"
           data-testid="retry-btn"
-          className="flex items-center gap-1 rounded-md bg-destructive/20 hover:bg-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md bg-destructive/20 hover:bg-destructive/30 hover:shadow-sm px-3 py-1.5 text-xs font-medium text-destructive transition-all disabled:opacity-50 disabled:pointer-events-none"
         >
           <RefreshCw className="h-3 w-3" aria-hidden="true" />
           {isRetrying ? "Retrying…" : "Retry"}
@@ -506,10 +506,10 @@ function ImageCard({ item, index, sessionTitle, onPinToggle, onRegenerate, isReg
           aria-label={item.pinned ? "Unpin image" : "Pin image"}
           aria-pressed={item.pinned}
           data-testid="pin-btn"
-          className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium shadow transition-colors ${
+          className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium shadow transition-all ${
             item.pinned
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-background/80 hover:bg-background"
+              ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md"
+              : "bg-background/80 hover:bg-background hover:shadow-md"
           }`}
         >
           {item.pinned ? (
@@ -526,7 +526,7 @@ function ImageCard({ item, index, sessionTitle, onPinToggle, onRegenerate, isReg
           disabled={isDownloading}
           aria-label="Download image"
           data-testid="download-btn"
-          className="flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs font-medium shadow hover:bg-background transition-colors disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs font-medium shadow hover:bg-background hover:shadow-md transition-all disabled:opacity-50 disabled:pointer-events-none"
         >
           <Download className="h-3 w-3" aria-hidden="true" />
           {isDownloading ? "Saving…" : "Download"}
@@ -538,7 +538,7 @@ function ImageCard({ item, index, sessionTitle, onPinToggle, onRegenerate, isReg
             onClick={() => onRegenerate(item)}
             aria-label="Regenerate image"
             data-testid="regenerate-btn"
-            className="flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs font-medium shadow hover:bg-background transition-colors"
+            className="flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs font-medium shadow hover:bg-background hover:shadow-md transition-all"
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
             Regen
