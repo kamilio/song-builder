@@ -162,7 +162,7 @@ const IMAGE_NAV_ITEMS: MenuItem[] = [
 
 // ─── TopBar ────────────────────────────────────────────────────────────────
 
-function TopBar() {
+function TopBar({ sessionTitle }: { sessionTitle?: string }) {
   const { handleReportBug } = useReportBug();
   const { balance } = usePoeBalanceContext();
   return (
@@ -180,6 +180,31 @@ function TopBar() {
         </div>
         <span className="font-semibold text-sm hidden sm:inline">Studio</span>
       </Link>
+
+      {/* Breadcrumb — takes remaining space, truncates gracefully */}
+      <nav
+        aria-label="Breadcrumb"
+        className="flex-1 min-w-0 overflow-hidden flex items-center gap-1 text-sm text-muted-foreground"
+      >
+        <Link
+          to="/image/sessions"
+          className="truncate hover:text-foreground transition-colors shrink"
+        >
+          Sessions
+        </Link>
+        {sessionTitle && (
+          <>
+            <span className="shrink-0 select-none" aria-hidden="true">/</span>
+            <span
+              className="font-medium text-foreground truncate max-w-[160px] sm:max-w-none shrink-0"
+              aria-current="page"
+              title={sessionTitle}
+            >
+              {sessionTitle}
+            </span>
+          </>
+        )}
+      </nav>
 
       <div className="flex items-center gap-2 shrink-0">
         {balance !== null && (
@@ -1246,7 +1271,7 @@ export default function SessionView() {
   return (
     <>
     <div className="flex flex-col h-screen" data-testid="session-view">
-      <TopBar />
+      <TopBar sessionTitle={data.session.title} />
 
       {/*
        * Body: three structural regions.
