@@ -31,9 +31,9 @@ test.describe("Top-bar navigation (US-002)", () => {
   test("sidebar is absent on all pages", async ({ page }) => {
     for (const route of PAGES_WITH_TOP_BAR) {
       await page.goto(route);
-      // The old sidebar had a nav with "Song Builder" text and nav links.
+      // The old sidebar had a nav with "Studio" text and nav links.
       // Confirm no element with the old sidebar nav structure exists.
-      // The new top-bar also has a "Song Builder" link, but it's in a <header> not a sidebar nav.
+      // The new top-bar also has a "Studio" link, but it's in a <header> not a sidebar nav.
       // The sidebar was a <nav> with w-56 and min-h-screen; we verify there is no sidebar nav.
       const sidebarNav = page.locator("nav.w-56, nav[class*='w-56']");
       await expect(sidebarNav).toHaveCount(0);

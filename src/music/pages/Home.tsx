@@ -96,7 +96,7 @@ export default function Home() {
           </svg>
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Song Builder</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Studio</h1>
           <p className="mt-1.5 text-muted-foreground text-base">
             Describe the song you want. Claude writes the lyrics, ElevenLabs makes it real.
           </p>

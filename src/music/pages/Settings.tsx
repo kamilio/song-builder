@@ -149,7 +149,7 @@ export default function Settings() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "song-builder-export.json";
+    a.download = "studio-export.json";
     a.click();
     URL.revokeObjectURL(url);
   }

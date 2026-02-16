@@ -37,7 +37,7 @@ export default function SharedHome() {
           <Music className="w-8 h-8 text-primary-foreground" aria-hidden="true" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Song Builder</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Studio</h1>
           <p className="mt-1.5 text-muted-foreground text-base">
             Create music and images with AI.
           </p>

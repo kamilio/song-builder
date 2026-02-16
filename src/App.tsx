@@ -82,12 +82,12 @@ function TopBar() {
       <Link
         to="/music"
         className="flex items-center gap-2 shrink-0 hover:opacity-75 transition-opacity"
-        aria-label="Song Builder home"
+        aria-label="Studio home"
       >
         <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
           <Music className="h-3.5 w-3.5 text-primary-foreground" />
         </div>
-        <span className="font-semibold text-sm hidden sm:inline">Song Builder</span>
+        <span className="font-semibold text-sm hidden sm:inline">Studio</span>
       </Link>
 
       {/* Breadcrumbs — takes remaining space, truncates gracefully */}
