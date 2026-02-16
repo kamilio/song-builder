@@ -5,6 +5,7 @@ import type {
   ImageSettings,
   ImageStorageExport,
 } from "./types";
+import { emitQuotaExceeded } from "@/shared/lib/storageQuotaEvents";
 
 const KEYS = {
   sessions: "song-builder:image-sessions",
@@ -24,7 +25,22 @@ function readJSON<T>(key: string): T | null {
 }
 
 function writeJSON<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    if (
+      err instanceof DOMException &&
+      (err.name === "QuotaExceededError" ||
+        err.name === "NS_ERROR_DOM_QUOTA_REACHED")
+    ) {
+      // Notify the UI and swallow so callers continue running uninterrupted.
+      // The pre-existing data in localStorage is never mutated, so no
+      // corruption occurs — only the new write is lost.
+      emitQuotaExceeded();
+      return;
+    }
+    throw err;
+  }
 }
 
 function generateId(): string {

@@ -18,6 +18,8 @@ import PinnedSongs from "@/music/pages/PinnedSongs";
 import Settings from "@/music/pages/Settings";
 import { log } from "@/music/lib/actionLog";
 import { useReportBug } from "@/shared/hooks/useReportBug";
+import { Toast } from "@/shared/components/Toast";
+import { useStorageQuotaToast } from "@/shared/hooks/useStorageQuotaToast";
 
 /**
  * Logs every route change to the in-memory action log.
@@ -112,10 +114,21 @@ function PageLayout({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Renders a global toast when localStorage quota is exceeded.
+ * Must be inside BrowserRouter so React hooks work; lives at the root so it
+ * covers every page.
+ */
+function StorageQuotaToast() {
+  const [toast, showToast] = useStorageQuotaToast();
+  return <Toast toast={toast} onDismiss={() => showToast(null)} />;
+}
+
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <RouteLogger />
+      <StorageQuotaToast />
       <Routes>
         {/* Root — shared landing with Music/Image tab switcher */}
         <Route path="/" element={<SharedHome />} />
