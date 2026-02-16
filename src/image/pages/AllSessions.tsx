@@ -13,16 +13,20 @@
  * immediately without requiring navigation. The delete handler calls
  * imageStorageService.deleteSession (soft-delete) and then removes the
  * entry from local state so the list re-renders instantly.
+ *
+ * US-017: Each session row shows up to 4 small image thumbnails (newest
+ * first), plus total image count and pinned count badges. Sessions with
+ * no images show no thumbnail area.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ImageIcon, LayoutList, Pin, Plus, Settings, Bug, Trash2 } from "lucide-react";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { imageStorageService } from "@/image/lib/storage";
-import type { ImageSession } from "@/image/lib/storage";
+import type { ImageSession, ImageItem } from "@/image/lib/storage";
 import { useReportBug } from "@/shared/hooks/useReportBug";
 
 // ─── Navigation items ──────────────────────────────────────────────────────
@@ -92,39 +96,80 @@ function TopBar() {
 
 // ─── SessionRow ────────────────────────────────────────────────────────────
 
+/** Max thumbnails shown per session card. */
+const MAX_THUMBNAILS = 4;
+
 interface SessionRowProps {
   session: ImageSession;
+  /** Non-deleted items for this session, sorted newest-first. */
+  items: ImageItem[];
   onDelete: (id: string) => void;
 }
 
-function SessionRow({ session, onDelete }: SessionRowProps) {
+function SessionRow({ session, items, onDelete }: SessionRowProps) {
   const formatted = new Date(session.createdAt).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 
+  const totalCount = items.length;
+  const pinnedCount = items.filter((i) => i.pinned).length;
+  const thumbnails = items.slice(0, MAX_THUMBNAILS);
+  const hasImages = totalCount > 0;
+
   return (
     <div
-      className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 hover:shadow-md hover:border-foreground/20 transition-all"
+      className="rounded-lg border border-border bg-card hover:shadow-md hover:border-foreground/20 transition-all"
       data-testid="session-list-item"
     >
-      <Link
-        to={`/image/sessions/${session.id}`}
-        className="flex items-center justify-between flex-1 min-w-0 gap-4"
-      >
-        <span className="text-sm font-medium truncate text-foreground">{session.title}</span>
-        <span className="text-xs text-muted-foreground shrink-0">{formatted}</span>
-      </Link>
-      <button
-        type="button"
-        onClick={() => onDelete(session.id)}
-        aria-label={`Delete session: ${session.title}`}
-        data-testid="delete-session-btn"
-        className="ml-3 shrink-0 flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-      >
-        <Trash2 className="h-4 w-4" aria-hidden="true" />
-      </button>
+      <div className="flex items-center justify-between px-4 py-3">
+        <Link
+          to={`/image/sessions/${session.id}`}
+          className="flex items-center justify-between flex-1 min-w-0 gap-4"
+        >
+          <span className="text-sm font-medium truncate text-foreground">{session.title}</span>
+          <span className="text-xs text-muted-foreground shrink-0">{formatted}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => onDelete(session.id)}
+          aria-label={`Delete session: ${session.title}`}
+          data-testid="delete-session-btn"
+          className="ml-3 shrink-0 flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+
+      {hasImages && (
+        <Link
+          to={`/image/sessions/${session.id}`}
+          className="flex items-center gap-2 px-4 pb-3"
+          tabIndex={-1}
+          aria-hidden="true"
+          data-testid="session-thumbnail-strip"
+        >
+          {thumbnails.map((item) => (
+            <img
+              key={item.id}
+              src={item.url}
+              alt=""
+              className="w-10 h-10 rounded object-cover shrink-0 border border-border"
+              data-testid="session-thumbnail"
+            />
+          ))}
+          <div className="flex items-center gap-2 ml-1 text-xs text-muted-foreground">
+            <span data-testid="session-image-count">{totalCount} {totalCount === 1 ? "image" : "images"}</span>
+            {pinnedCount > 0 && (
+              <span className="flex items-center gap-0.5" data-testid="session-pinned-count">
+                <Pin className="h-3 w-3" aria-hidden="true" />
+                {pinnedCount}
+              </span>
+            )}
+          </div>
+        </Link>
+      )}
     </div>
   );
 }
@@ -138,6 +183,43 @@ export default function AllSessions() {
       .listSessions()
       .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1))
   );
+
+  /**
+   * Map of sessionId → non-deleted items sorted newest-first.
+   * Scoped to the currently-visible session IDs so the map stays consistent
+   * after deletions without including stale entries.
+   *
+   * US-017: Feeds thumbnail strips and image/pinned counts into each
+   * SessionRow without per-row storage reads.
+   */
+  const itemsBySession = useMemo<Map<string, ImageItem[]>>(() => {
+    const visibleIds = new Set(sessions.map((s) => s.id));
+    const { items: allItems, generations: allGenerations } = imageStorageService.export();
+
+    // Build generationId → sessionId lookup (only for visible sessions)
+    const genToSession = new Map<string, string>(
+      allGenerations
+        .filter((g) => visibleIds.has(g.sessionId))
+        .map((g) => [g.id, g.sessionId])
+    );
+
+    const map = new Map<string, ImageItem[]>();
+    for (const item of allItems) {
+      if (item.deleted) continue;
+      const sessionId = genToSession.get(item.generationId);
+      if (!sessionId) continue;
+      const list = map.get(sessionId) ?? [];
+      list.push(item);
+      map.set(sessionId, list);
+    }
+
+    // Sort each list newest-first
+    for (const list of map.values()) {
+      list.sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1));
+    }
+
+    return map;
+  }, [sessions]);
 
   // Session ID pending deletion confirmation; null when no dialog is open.
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -197,7 +279,12 @@ export default function AllSessions() {
             data-testid="session-list"
           >
             {sessions.map((session) => (
-              <SessionRow key={session.id} session={session} onDelete={handleDelete} />
+              <SessionRow
+                key={session.id}
+                session={session}
+                items={itemsBySession.get(session.id) ?? []}
+                onDelete={handleDelete}
+              />
             ))}
           </div>
         )}

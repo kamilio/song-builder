@@ -9,11 +9,13 @@
  *   npx playwright test tests/image/screenshot-baselines.spec.ts --update-snapshots
  *
  * Page / fixture mapping:
- *   /image (empty)          → clearImageStorage  (no sessions)
- *   /image (returning user) → twoSessionsFixture (2 recent sessions)
- *   /image/sessions/:id     → imageMultiStepFixture (2 steps, 6 items)
- *   /image/pinned (empty)   → clearImageStorage  (no pinned images)
- *   /image/pinned (pinned)  → imagePinnedFixture (1 pinned image)
+ *   /image (empty)             → clearImageStorage      (no sessions)
+ *   /image (returning user)    → twoSessionsFixture     (2 recent sessions)
+ *   /image/sessions (empty)    → clearImageStorage      (no sessions)
+ *   /image/sessions (with img) → imageMultiStepFixture  (1 session, 6 items)
+ *   /image/sessions/:id        → imageMultiStepFixture  (2 steps, 6 items)
+ *   /image/pinned (empty)      → clearImageStorage      (no pinned images)
+ *   /image/pinned (pinned)     → imagePinnedFixture     (1 pinned image)
  */
 
 import { test, expect } from "@playwright/test";
@@ -229,6 +231,80 @@ test(
     await expect(page.getByTestId("pinned-image-list")).toBeVisible();
 
     await expect(page).toHaveScreenshot("image-pinned-with-pins-mobile.png", {
+      fullPage: true,
+      maxDiffPixelRatio: 0.02,
+    });
+  }
+);
+
+// ─── /image/sessions — empty state ───────────────────────────────────────────
+
+test(
+  "@screenshot:image-all-sessions all sessions page empty state desktop baseline",
+  async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await clearImageStorage(page);
+    await page.goto("/image/sessions");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("all-sessions-empty")).toBeVisible();
+
+    await expect(page).toHaveScreenshot("image-all-sessions-empty-desktop.png", {
+      fullPage: true,
+      maxDiffPixelRatio: 0.02,
+    });
+  }
+);
+
+test(
+  "@screenshot:image-all-sessions all sessions page empty state mobile baseline",
+  async ({ page }) => {
+    await page.setViewportSize(MOBILE);
+    await clearImageStorage(page);
+    await page.goto("/image/sessions");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("all-sessions-empty")).toBeVisible();
+
+    await expect(page).toHaveScreenshot("image-all-sessions-empty-mobile.png", {
+      fullPage: true,
+      maxDiffPixelRatio: 0.02,
+    });
+  }
+);
+
+// ─── /image/sessions — with image thumbnails (US-017) ────────────────────────
+
+test(
+  "@screenshot:image-all-sessions all sessions page with thumbnails desktop baseline",
+  async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await seedImageFixture(page, imageMultiStepFixture);
+    await page.goto("/image/sessions");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("session-list")).toBeVisible();
+    await expect(page.getByTestId("session-thumbnail-strip").first()).toBeVisible();
+
+    await expect(page).toHaveScreenshot("image-all-sessions-with-thumbnails-desktop.png", {
+      fullPage: true,
+      maxDiffPixelRatio: 0.02,
+    });
+  }
+);
+
+test(
+  "@screenshot:image-all-sessions all sessions page with thumbnails mobile baseline",
+  async ({ page }) => {
+    await page.setViewportSize(MOBILE);
+    await seedImageFixture(page, imageMultiStepFixture);
+    await page.goto("/image/sessions");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("session-list")).toBeVisible();
+    await expect(page.getByTestId("session-thumbnail-strip").first()).toBeVisible();
+
+    await expect(page).toHaveScreenshot("image-all-sessions-with-thumbnails-mobile.png", {
       fullPage: true,
       maxDiffPixelRatio: 0.02,
     });
