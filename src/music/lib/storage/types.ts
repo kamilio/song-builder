@@ -1,6 +1,7 @@
 export interface Settings {
   poeApiKey: string;
   numSongs: number;
+  chatModel?: string;
 }
 
 /**

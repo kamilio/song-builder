@@ -18,6 +18,7 @@ function loadInitialSettings() {
   return {
     apiKey: settings?.poeApiKey ?? "",
     numSongs: settings?.numSongs ?? 3,
+    chatModel: settings?.chatModel ?? "",
     numImages: imageSettings?.numImages ?? 3,
   };
 }
@@ -27,6 +28,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const [apiKey, setApiKey] = useState(initial.apiKey);
   const [numSongs, setNumSongs] = useState(initial.numSongs);
+  const [chatModel, setChatModel] = useState(initial.chatModel);
   const [numImages, setNumImages] = useState(initial.numImages);
   const [includeApiKey, setIncludeApiKey] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
@@ -82,7 +84,7 @@ export default function Settings() {
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    saveSettings({ poeApiKey: apiKey, numSongs });
+    saveSettings({ poeApiKey: apiKey, numSongs, ...(chatModel ? { chatModel } : {}) });
     saveImageSettings({ numImages });
     setSavedMessage("Settings saved.");
     setTimeout(() => setSavedMessage(""), 3000);
@@ -198,8 +200,11 @@ export default function Settings() {
               ) : chatModels.length > 0 ? (
                 <select
                   id="chatModel"
+                  value={chatModel}
+                  onChange={(e) => setChatModel(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
+                  <option value="">Default (claude-sonnet-4.5)</option>
                   {chatModels.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label}

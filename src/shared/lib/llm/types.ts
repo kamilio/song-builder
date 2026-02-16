@@ -10,8 +10,9 @@ export interface ChatMessage {
 export interface LLMClient {
   /**
    * Send a chat message history to Claude and return the assistant's response text.
+   * @param model - optional model name; falls back to claude-sonnet-4.5 when omitted
    */
-  chat(messages: ChatMessage[]): Promise<string>;
+  chat(messages: ChatMessage[], model?: string): Promise<string>;
 
   /**
    * Submit a style prompt to ElevenLabs and return a publicly-accessible audio URL.

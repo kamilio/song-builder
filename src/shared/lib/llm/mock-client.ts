@@ -34,7 +34,7 @@ export class MockLLMClient implements LLMClient {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async chat(_messages: ChatMessage[]): Promise<string> {
+  async chat(_messages: ChatMessage[], _model?: string): Promise<string> {
     await this.delay();
     return lyricsFixtures[this.chatCallCount++ % lyricsFixtures.length];
   }

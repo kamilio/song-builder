@@ -349,12 +349,7 @@ export default function LyricsGenerator() {
         ];
         const settings = getSettings();
         const client = createLLMClient(settings?.poeApiKey ?? undefined);
-        log({
-          category: "llm:request",
-          action: "llm:chat:start",
-          data: { userMessageId: id, historyLength: history.length },
-        });
-        const responseText = await client.chat(history);
+        const responseText = await client.chat(history, settings?.chatModel);
         const parsed = parseLyricsResponse(responseText);
         const assistantMsg = createMessage({
           role: "assistant",
@@ -362,19 +357,9 @@ export default function LyricsGenerator() {
           parentId: id,
           ...(parsed ?? {}),
         });
-        log({
-          category: "llm:response",
-          action: "llm:chat:complete",
-          data: { userMessageId: id, assistantMessageId: assistantMsg.id, parsed: parsed !== null },
-        });
         navigate(`/music/lyrics/${assistantMsg.id}`, { replace: true });
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        log({
-          category: "llm:response",
-          action: "llm:chat:error",
-          data: { userMessageId: id, error: errMsg },
-        });
         showErrorToast({
           message: `Generation failed: ${errMsg}. Please try again.`,
           variant: "error",
@@ -455,7 +440,7 @@ export default function LyricsGenerator() {
       log({
         category: "user:action",
         action: "chat:submit",
-        data: { messageId: userMsg.id, parentId },
+        data: { messageId: userMsg.id, parentId, content: trimmed },
       });
 
       setUserInput("");
@@ -474,13 +459,7 @@ export default function LyricsGenerator() {
         const settings = getSettings();
         const client = createLLMClient(settings?.poeApiKey ?? undefined);
 
-        log({
-          category: "llm:request",
-          action: "llm:chat:start",
-          data: { userMessageId: userMsg.id, historyLength: history.length },
-        });
-
-        const responseText = await client.chat(history);
+        const responseText = await client.chat(history, settings?.chatModel);
 
         const parsed = parseLyricsResponse(responseText);
         const assistantMsg = createMessage({
@@ -490,28 +469,10 @@ export default function LyricsGenerator() {
           ...(parsed ?? {}),
         });
 
-        log({
-          category: "llm:response",
-          action: "llm:chat:complete",
-          data: {
-            userMessageId: userMsg.id,
-            assistantMessageId: assistantMsg.id,
-            parsed: parsed !== null,
-          },
-        });
-
         // Navigate to the new assistant message.
         navigate(`/music/lyrics/${assistantMsg.id}`, { replace: !id });
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        log({
-          category: "llm:response",
-          action: "llm:chat:error",
-          data: {
-            userMessageId: userMsg.id,
-            error: errMsg,
-          },
-        });
         showErrorToast({
           message: `Generation failed: ${errMsg}. Please try again.`,
           variant: "error",
@@ -763,7 +724,10 @@ export default function LyricsGenerator() {
           <button
             type="button"
             className="font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded min-h-[44px] inline-flex items-center px-1"
-            onClick={() => navigate(`/music/lyrics/${latestLeafId}`)}
+            onClick={() => {
+              log({ category: "user:action", action: "lyrics:return-to-latest", data: { from: id, to: latestLeafId } });
+              navigate(`/music/lyrics/${latestLeafId}`);
+            }}
             data-testid="return-to-latest-btn"
           >
             Return to latest
@@ -789,7 +753,7 @@ export default function LyricsGenerator() {
                   ? "border-b-2 border-primary text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-              onClick={() => setActiveTab("lyrics")}
+              onClick={() => { log({ category: "user:action", action: "lyrics:tab", data: { tab: "lyrics" } }); setActiveTab("lyrics"); }}
               data-testid="tab-lyrics"
             >
               Lyrics
@@ -803,7 +767,7 @@ export default function LyricsGenerator() {
                   ? "border-b-2 border-primary text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-              onClick={() => setActiveTab("chat")}
+              onClick={() => { log({ category: "user:action", action: "lyrics:tab", data: { tab: "chat" } }); setActiveTab("chat"); }}
               data-testid="tab-chat"
             >
               Chat
@@ -852,7 +816,7 @@ export default function LyricsGenerator() {
       <div className="border-t bg-muted/30 px-4 py-3 flex justify-between items-center shrink-0">
         <Button
           variant="outline"
-          onClick={() => navigate("/music")}
+          onClick={() => { log({ category: "user:action", action: "lyrics:new", data: {} }); navigate("/music"); }}
           data-testid="new-lyrics-btn"
           className="min-h-[44px] gap-2"
         >

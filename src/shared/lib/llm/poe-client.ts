@@ -30,9 +30,9 @@ export class PoeLLMClient implements LLMClient {
     });
   }
 
-  async chat(messages: ChatMessage[]): Promise<string> {
+  async chat(messages: ChatMessage[], model?: string): Promise<string> {
     const response = await this.client.chat.completions.create({
-      model: "claude-sonnet-4.5",
+      model: model ?? "claude-sonnet-4.5",
       messages,
     });
 
@@ -62,9 +62,17 @@ export class PoeLLMClient implements LLMClient {
         // @ts-expect-error extra_body is a Poe-specific extension not in the OpenAI types
         extra_body: { image_only: true },
       });
-      const url = response.choices[0]?.message?.content;
-      if (!url) throw new Error("nano-banana returned an empty response");
-      return url;
+      const content = response.choices[0]?.message?.content;
+      if (!content) throw new Error("nano-banana returned an empty response");
+
+      // The model may return markdown: "![image](url)\n\nurl"
+      // Extract the raw URL: prefer the last non-empty line (the standalone URL),
+      // fall back to pulling the href out of the markdown image syntax.
+      const lastLine = content.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? "";
+      if (lastLine.startsWith("http")) return lastLine;
+      const mdMatch = content.match(/!\[.*?\]\((https?:\/\/[^)]+)\)/);
+      if (mdMatch) return mdMatch[1];
+      return content.trim();
     };
 
     return Promise.all(Array.from({ length: count }, makeRequest));
