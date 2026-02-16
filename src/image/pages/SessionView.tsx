@@ -748,13 +748,30 @@ export default function SessionView() {
         prompt: trimmed,
       });
 
+      // Base64-encode the remix file if one is selected (US-007).
+      // FileReader.readAsDataURL() produces a data URI like "data:image/png;base64,<data>".
+      // Strip the prefix to obtain the raw base64 string required by the API.
+      let remixImageBase64: string | undefined;
+      if (remixFile) {
+        remixImageBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            // Strip the "data:<mime>;base64," prefix
+            const base64 = dataUrl.split(",")[1];
+            resolve(base64);
+          };
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(remixFile);
+        });
+      }
+
       // Fire N independent parallel requests using allSettled so that a single
       // failure does not abort sibling requests (US-022).
-      // Pass selected model id and extraBody through (US-004); the LLM client
-      // implementation will use them once US-005 is complete.
+      // Pass selected model id, extraBody, and remixImageBase64 through (US-004, US-005, US-007).
       const settled = await Promise.allSettled(
         Array.from({ length: numImages }, () =>
-          client.generateImage(trimmed, 1, selectedModel.id, selectedModel.extraBody)
+          client.generateImage(trimmed, 1, selectedModel.id, selectedModel.extraBody, remixImageBase64)
         )
       );
 
@@ -799,7 +816,7 @@ export default function SessionView() {
         setIsGenerating(false);
       }
     }
-  }, [id, data, prompt, isGenerating, guardAction, selectedModel]);
+  }, [id, data, prompt, isGenerating, guardAction, selectedModel, remixFile]);
 
   if (!data) {
     return <Navigate to="/image" replace />;

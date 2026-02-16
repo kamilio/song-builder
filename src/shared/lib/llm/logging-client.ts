@@ -57,14 +57,14 @@ export class LoggingLLMClient implements LLMClient {
     }
   }
 
-  async generateImage(prompt: string, count?: number, model?: string, extraBody?: Record<string, unknown>): Promise<string[]> {
+  async generateImage(prompt: string, count?: number, model?: string, extraBody?: Record<string, unknown>, remixImageBase64?: string): Promise<string[]> {
     log({
       category: "llm:request",
       action: "llm:image:start",
-      data: { prompt, count, model, extraBody },
+      data: { prompt, count, model, extraBody, hasRemixImage: remixImageBase64 !== undefined },
     });
     try {
-      const result = await this.inner.generateImage(prompt, count, model, extraBody);
+      const result = await this.inner.generateImage(prompt, count, model, extraBody, remixImageBase64);
       log({
         category: "llm:response",
         action: "llm:image:complete",

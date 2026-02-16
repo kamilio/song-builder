@@ -27,6 +27,7 @@ export interface LLMClient {
    * @param count - number of images to generate in parallel (default 3)
    * @param model - optional model id; falls back to implementation default when omitted
    * @param extraBody - optional extra fields forwarded verbatim to the API request body
+   * @param remixImageBase64 - optional raw base64-encoded reference image for remix (no data URI prefix)
    */
-  generateImage(prompt: string, count?: number, model?: string, extraBody?: Record<string, unknown>): Promise<string[]>;
+  generateImage(prompt: string, count?: number, model?: string, extraBody?: Record<string, unknown>, remixImageBase64?: string): Promise<string[]>;
 }

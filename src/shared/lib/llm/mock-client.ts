@@ -47,7 +47,7 @@ export class MockLLMClient implements LLMClient {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async generateImage(_prompt: string, count = 3, _model?: string, _extraBody?: Record<string, unknown>): Promise<string[]> {
+  async generateImage(_prompt: string, count = 3, _model?: string, _extraBody?: Record<string, unknown>, _remixImageBase64?: string): Promise<string[]> {
     await this.delay();
     const urls: string[] = [];
     for (let i = 0; i < count; i++) {
