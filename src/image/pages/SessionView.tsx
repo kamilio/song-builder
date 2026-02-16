@@ -84,6 +84,7 @@ import { useReportBug } from "@/shared/hooks/useReportBug";
 import { IMAGE_MODELS } from "@/image/lib/imageModels";
 import { downloadBlob } from "@/shared/lib/downloadBlob";
 import type { ImageModelDef } from "@/image/lib/imageModels";
+import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 
 // ─── Download helper (US-023) ──────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ const IMAGE_NAV_ITEMS: MenuItem[] = [
 
 function TopBar() {
   const { handleReportBug } = useReportBug();
+  const { balance } = usePoeBalanceContext();
   return (
     <header
       className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b bg-background/95 backdrop-blur-sm gap-4"
@@ -169,7 +171,18 @@ function TopBar() {
         <span className="font-semibold text-sm hidden sm:inline">Studio</span>
       </Link>
 
-      <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleReportBug} />
+      <div className="flex items-center gap-2 shrink-0">
+        {balance !== null && (
+          <span
+            className="text-xs text-muted-foreground tabular-nums"
+            data-testid="poe-balance"
+            aria-label={`POE balance: ${balance}`}
+          >
+            {balance}
+          </span>
+        )}
+        <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleReportBug} />
+      </div>
     </header>
   );
 }
@@ -635,6 +648,7 @@ function latestPrompt(generations: ImageGeneration[]): string {
 export default function SessionView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { refreshBalance } = usePoeBalanceContext();
 
   // Initialise data from storage once on mount (id is stable for the lifetime of this view).
   const [data, setData] = useState<SessionData | null>(() => loadSession(id));
@@ -793,6 +807,9 @@ export default function SessionView() {
 
       if (!isMounted.current) return;
 
+      // Refresh balance after image generation completes (US-024).
+      refreshBalance(musicSettings?.poeApiKey);
+
       // Build per-slot results: persist successful URLs and capture error messages.
       const slots: SlotResult[] = settled.map((result) => {
         if (result.status === "fulfilled") {
@@ -832,7 +849,7 @@ export default function SessionView() {
         setIsGenerating(false);
       }
     }
-  }, [id, data, prompt, isGenerating, selectedModel, remixFile]);
+  }, [id, data, prompt, isGenerating, selectedModel, remixFile, refreshBalance]);
 
   const handleGenerate = useCallback(() => {
     // Guard: show modal and abort if no API key is configured (US-020/US-023).
@@ -916,6 +933,9 @@ export default function SessionView() {
         url,
       });
 
+      // Refresh balance after successful retry (US-024).
+      refreshBalance(musicSettings?.poeApiKey);
+
       // Replace the error slot with the newly generated item.
       const updated = loadSession(id);
       if (isMounted.current) {
@@ -945,7 +965,7 @@ export default function SessionView() {
         );
       });
     }
-  }, [id, data, prompt, guardAction, selectedModel, remixFile]);
+  }, [id, data, prompt, guardAction, selectedModel, remixFile, refreshBalance]);
 
   if (!data) {
     return <Navigate to="/image" replace />;

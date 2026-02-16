@@ -20,6 +20,7 @@ import { log } from "@/music/lib/actionLog";
 import { useReportBug } from "@/shared/hooks/useReportBug";
 import { Toast } from "@/shared/components/Toast";
 import { useStorageQuotaToast } from "@/shared/hooks/useStorageQuotaToast";
+import { PoeBalanceProvider, usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 
 /**
  * Logs every route change to the in-memory action log.
@@ -69,10 +70,11 @@ const MUSIC_NAV_ITEMS: MenuItem[] = [
  *
  * Left:  branding link back to /
  * Center: breadcrumb segments
- * Right: circular NavMenu button
+ * Right: balance badge + New Lyrics shortcut + circular NavMenu button
  */
 function TopBar() {
   const { handleReportBug } = useReportBug();
+  const { balance } = usePoeBalanceContext();
   return (
     <header
       className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b bg-background/95 backdrop-blur-sm gap-4"
@@ -95,8 +97,17 @@ function TopBar() {
         <Breadcrumb />
       </div>
 
-      {/* New Lyrics shortcut + Navigation menu */}
+      {/* Balance badge + New Lyrics shortcut + Navigation menu */}
       <div className="flex items-center gap-2 shrink-0">
+        {balance !== null && (
+          <span
+            className="text-xs text-muted-foreground tabular-nums"
+            data-testid="poe-balance"
+            aria-label={`POE balance: ${balance}`}
+          >
+            {balance}
+          </span>
+        )}
         <Link
           to="/music/lyrics/new"
           className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium border border-border bg-background hover:bg-accent transition-colors"
@@ -137,6 +148,7 @@ function StorageQuotaToast() {
 
 export default function App() {
   return (
+    <PoeBalanceProvider>
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <RouteLogger />
       <StorageQuotaToast />
@@ -219,5 +231,6 @@ export default function App() {
         <Route path="/music/settings" element={<Navigate to="/settings" replace />} />
       </Routes>
     </BrowserRouter>
+    </PoeBalanceProvider>
   );
 }

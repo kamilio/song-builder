@@ -41,6 +41,7 @@ import type { Message, Song } from "@/music/lib/storage/types";
 import { createLLMClient } from "@/shared/lib/llm/factory";
 import { downloadBlob } from "@/shared/lib/downloadBlob";
 import { log } from "@/music/lib/actionLog";
+import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 
 /** Build the style prompt sent to ElevenLabs from a message's lyrics fields. */
 function buildStylePrompt(message: Message): string {
@@ -149,6 +150,8 @@ export default function SongGenerator() {
     return [...storedSongs, ...uniqueNew];
   }, [storedSongs, newSongs]);
 
+  const { refreshBalance } = usePoeBalanceContext();
+
   const handleGenerateCore = useCallback(async () => {
     if (isGenerating) return;
     if (!messageId || !message) return;
@@ -208,10 +211,11 @@ export default function SongGenerator() {
     });
 
     await Promise.allSettled(promises);
+    refreshBalance(settings?.poeApiKey);
     setIsGenerating(false);
     // Clear slots now that all have resolved; the persisted songs list shows the results.
     setSlots(new Map());
-  }, [messageId, message, isGenerating]);
+  }, [messageId, message, isGenerating, refreshBalance]);
 
   const handleGenerate = useCallback(() => {
     // API key guard must run first so the modal appears even without a message.

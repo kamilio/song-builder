@@ -7,6 +7,7 @@ import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
 import { imageStorageService } from "@/image/lib/storage";
 import { useReportBug } from "@/shared/hooks/useReportBug";
+import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 
 const IMAGE_NAV_ITEMS: MenuItem[] = [
   {
@@ -47,6 +48,7 @@ export default function ImageHome() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
   const { handleReportBug } = useReportBug();
+  const { balance } = usePoeBalanceContext();
 
   // Load the 2 most recent sessions for returning users.
   const recentSessions = imageStorageService
@@ -73,7 +75,16 @@ export default function ImageHome() {
 
   return (
     <div className="min-h-screen flex flex-col items-center p-6 pt-20 pb-16 bg-gradient-to-b from-background to-secondary/30">
-      <div className="fixed top-4 right-4 z-40">
+      <div className="fixed top-4 right-4 z-40 flex items-center gap-2">
+        {balance !== null && (
+          <span
+            className="text-xs text-muted-foreground tabular-nums"
+            data-testid="poe-balance"
+            aria-label={`POE balance: ${balance}`}
+          >
+            {balance}
+          </span>
+        )}
         <NavMenu items={IMAGE_NAV_ITEMS} onReportBug={handleReportBug} />
       </div>
 

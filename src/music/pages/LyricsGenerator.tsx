@@ -52,6 +52,7 @@ import type { Message } from "@/music/lib/storage/types";
 import { createLLMClient } from "@/shared/lib/llm/factory";
 import type { ChatMessage as LLMChatMessage } from "@/shared/lib/llm/types";
 import { log } from "@/music/lib/actionLog";
+import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 
 const LYRICS_SYSTEM_PROMPT = `You are a professional songwriter and lyricist. \
 Help the user write and refine song lyrics.
@@ -275,6 +276,7 @@ export default function LyricsGenerator() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isModalOpen, guardAction, closeModal, proceedWithPendingAction } = useApiKeyGuard();
+  const { refreshBalance } = usePoeBalanceContext();
   const isMobile = useIsMobile();
 
   const [userInput, setUserInput] = useState("");
@@ -354,6 +356,7 @@ export default function LyricsGenerator() {
         const settings = getSettings();
         const client = createLLMClient(settings?.poeApiKey ?? undefined);
         const responseText = await client.chat(history, settings?.chatModel);
+        refreshBalance(settings?.poeApiKey);
         const parsed = parseLyricsResponse(responseText);
         const assistantMsg = createMessage({
           role: "assistant",
@@ -463,6 +466,7 @@ export default function LyricsGenerator() {
         const client = createLLMClient(settings?.poeApiKey ?? undefined);
 
         const responseText = await client.chat(history, settings?.chatModel);
+        refreshBalance(settings?.poeApiKey);
 
         const parsed = parseLyricsResponse(responseText);
         const assistantMsg = createMessage({
@@ -487,7 +491,7 @@ export default function LyricsGenerator() {
         if (id) setRefreshCount((c) => c + 1);
       }
     },
-    [id, currentMessage, ancestorPath, navigate, showErrorToast]
+    [id, currentMessage, ancestorPath, navigate, showErrorToast, refreshBalance]
   );
 
   const handleSubmit = useCallback(
