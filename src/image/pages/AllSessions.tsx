@@ -17,11 +17,15 @@
  * US-017: Each session row shows up to 4 small image thumbnails (newest
  * first), plus total image count and pinned count badges. Sessions with
  * no images show no thumbnail area.
+ *
+ * US-018: Sort dropdown (newest first, oldest first, most images, most
+ * pinned) and real-time search by title. Sort and search can be combined;
+ * empty search shows all sessions.
  */
 
 import { useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ImageIcon, LayoutList, Pin, Plus, Settings, Bug, Trash2 } from "lucide-react";
+import { ImageIcon, LayoutList, Pin, Plus, Settings, Bug, Trash2, Search } from "lucide-react";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
@@ -57,6 +61,17 @@ const IMAGE_NAV_ITEMS: MenuItem[] = [
     "data-testid": "nav-menu-report-bug",
   },
 ];
+
+// ─── Sort options ──────────────────────────────────────────────────────────
+
+type SortOption = "newest" | "oldest" | "most-images" | "most-pinned";
+
+const SORT_LABELS: Record<SortOption, string> = {
+  newest: "Newest first",
+  oldest: "Oldest first",
+  "most-images": "Most images",
+  "most-pinned": "Most pinned",
+};
 
 // ─── TopBar ────────────────────────────────────────────────────────────────
 
@@ -177,11 +192,9 @@ function SessionRow({ session, items, onDelete }: SessionRowProps) {
 // ─── AllSessions ───────────────────────────────────────────────────────────
 
 export default function AllSessions() {
-  // Load all non-deleted sessions on mount, sorted newest-first.
+  // Load all non-deleted sessions on mount, unsorted (sorting applied in derived state).
   const [sessions, setSessions] = useState<ImageSession[]>(() =>
-    imageStorageService
-      .listSessions()
-      .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1))
+    imageStorageService.listSessions()
   );
 
   /**
@@ -221,6 +234,49 @@ export default function AllSessions() {
     return map;
   }, [sessions]);
 
+  // US-018: Sort and search state
+  const [sortOption, setSortOption] = useState<SortOption>("newest");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  /**
+   * Derived list: filter by search query, then sort by selected option.
+   * Both filter and sort are applied in one pass over the sessions array.
+   */
+  const displayedSessions = useMemo<ImageSession[]>(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    // Filter by title (case-insensitive); empty query passes all sessions.
+    const filtered = query
+      ? sessions.filter((s) => s.title.toLowerCase().includes(query))
+      : sessions;
+
+    // Sort a copy to avoid mutating state
+    return [...filtered].sort((a, b) => {
+      switch (sortOption) {
+        case "newest":
+          return a.createdAt > b.createdAt ? -1 : 1;
+        case "oldest":
+          return a.createdAt < b.createdAt ? -1 : 1;
+        case "most-images": {
+          const aCount = (itemsBySession.get(a.id) ?? []).length;
+          const bCount = (itemsBySession.get(b.id) ?? []).length;
+          if (bCount !== aCount) return bCount - aCount;
+          // Tie-break: newest first
+          return a.createdAt > b.createdAt ? -1 : 1;
+        }
+        case "most-pinned": {
+          const aPinned = (itemsBySession.get(a.id) ?? []).filter((i) => i.pinned).length;
+          const bPinned = (itemsBySession.get(b.id) ?? []).filter((i) => i.pinned).length;
+          if (bPinned !== aPinned) return bPinned - aPinned;
+          // Tie-break: newest first
+          return a.createdAt > b.createdAt ? -1 : 1;
+        }
+        default:
+          return 0;
+      }
+    });
+  }, [sessions, sortOption, searchQuery, itemsBySession]);
+
   // Session ID pending deletion confirmation; null when no dialog is open.
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
@@ -244,6 +300,9 @@ export default function AllSessions() {
     setPendingDeleteId(null);
   }, []);
 
+  // True when sessions exist but none match the current search query.
+  const isSearchEmpty = sessions.length > 0 && displayedSessions.length === 0;
+
   return (
     <div className="flex flex-col min-h-screen">
       <TopBar />
@@ -254,8 +313,45 @@ export default function AllSessions() {
           <h1 className="text-xl font-bold tracking-tight">All Sessions</h1>
         </div>
         <p className="text-muted-foreground mt-1 text-sm mb-6">
-          All your image generation sessions, newest first.
+          All your image generation sessions.
         </p>
+
+        {/* US-018: Sort and search controls */}
+        {sessions.length > 0 && (
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            {/* Search input */}
+            <div className="relative flex-1 min-w-[160px]">
+              <Search
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search sessions…"
+                aria-label="Search sessions"
+                data-testid="sessions-search-input"
+                className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            {/* Sort dropdown */}
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+              aria-label="Sort sessions"
+              data-testid="sessions-sort-select"
+              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
+            >
+              {(Object.keys(SORT_LABELS) as SortOption[]).map((opt) => (
+                <option key={opt} value={opt}>
+                  {SORT_LABELS[opt]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {sessions.length === 0 ? (
           <div
@@ -273,12 +369,25 @@ export default function AllSessions() {
               </p>
             </div>
           </div>
+        ) : isSearchEmpty ? (
+          <div
+            className="mt-10 flex flex-col items-center gap-3 text-center"
+            data-testid="sessions-search-empty"
+          >
+            <Search size={32} className="text-muted-foreground/40" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-medium text-foreground">No sessions match</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Try a different search term.
+              </p>
+            </div>
+          </div>
         ) : (
           <div
             className="flex flex-col gap-2"
             data-testid="session-list"
           >
-            {sessions.map((session) => (
+            {displayedSessions.map((session) => (
               <SessionRow
                 key={session.id}
                 session={session}
