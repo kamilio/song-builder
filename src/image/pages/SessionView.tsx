@@ -1,5 +1,5 @@
 /**
- * SessionView page (US-007, US-014, US-015, US-016, US-017, US-018, US-021, US-022, US-023)
+ * SessionView page (US-007, US-014, US-015, US-016, US-017, US-018, US-021, US-022, US-023, US-025)
  *
  * Route: /image/sessions/:id
  *
@@ -63,6 +63,13 @@
  * data so thumbnails reflect the new state. The Pin button visually
  * distinguishes pinned vs unpinned state. Thumbnail images also show a pin
  * indicator when pinned.
+ *
+ * US-025: Per-image regenerate action. Each image card in the main pane has a
+ * Regenerate button. Clicking it fires a new generateImage call for that slot
+ * only. The new image is stored as an additional ImageItem in the same
+ * generation and displayed alongside the original — the old image remains
+ * visible. While the slot is regenerating, a spinner card with elapsed timer
+ * replaces the image card. Sibling slots are unaffected.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -406,7 +413,7 @@ type SlotResult =
   | { kind: "item"; item: ImageItem }
   | { kind: "error"; message: string; isRetrying?: boolean };
 
-// ─── ImageCard (US-023) ────────────────────────────────────────────────────
+// ─── ImageCard (US-023, US-025) ────────────────────────────────────────────
 
 interface ImageCardProps {
   item: ImageItem;
@@ -416,17 +423,35 @@ interface ImageCardProps {
   sessionTitle: string;
   /** Called when the user toggles the pin state for this image (US-024). */
   onPinToggle: (item: ImageItem) => void;
+  /**
+   * US-025: Called when the user clicks Regenerate on this image card.
+   * Fires a new generateImage call for this slot; the result is appended
+   * alongside the original image.
+   */
+  onRegenerate?: (item: ImageItem) => void;
+  /**
+   * US-025: True while a regeneration for this specific image is in-flight.
+   * When true, a spinner card replaces the image and the Regenerate button
+   * is disabled.
+   */
+  isRegenerating?: boolean;
 }
 
 /**
- * A single image card with overlaid Download (US-023) and Pin toggle (US-024)
- * buttons. Both buttons are always visible so users can easily discover them.
+ * A single image card with overlaid Download (US-023), Pin toggle (US-024),
+ * and Regenerate (US-025) buttons. All buttons are always visible so users
+ * can easily discover them.
+ *
+ * US-025: When isRegenerating is true, a spinner card with elapsed timer is
+ * shown instead of the image. The old image is preserved in storage and will
+ * be visible in thumbnails; the new image appears alongside it once ready.
  *
  * The Pin button visually distinguishes pinned (filled icon + tinted background)
  * from unpinned (outline icon) state.
  */
-function ImageCard({ item, index, sessionTitle, onPinToggle }: ImageCardProps) {
+function ImageCard({ item, index, sessionTitle, onPinToggle, onRegenerate, isRegenerating }: ImageCardProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const elapsed = useElapsedTimer(isRegenerating ?? false);
 
   const handleDownload = useCallback(async () => {
     if (isDownloading) return;
@@ -438,6 +463,29 @@ function ImageCard({ item, index, sessionTitle, onPinToggle }: ImageCardProps) {
       setIsDownloading(false);
     }
   }, [item.url, item.id, index, sessionTitle, isDownloading]);
+
+  // US-025: While regenerating, show a spinner card at the same fixed size
+  // as SkeletonCard so the layout stays stable.
+  if (isRegenerating) {
+    return (
+      <div
+        className="rounded-lg overflow-hidden border bg-card shadow-sm animate-pulse relative"
+        data-testid="image-card-regenerating"
+        role="status"
+        aria-label={`Regenerating image… ${elapsed}s`}
+      >
+        <div
+          className="bg-muted flex flex-col items-center justify-center gap-2"
+          style={{ width: "320px", height: "320px" }}
+        >
+          <Loader2 className="h-8 w-8 text-muted-foreground/60 animate-spin" />
+          <span className="text-sm text-muted-foreground/60 font-medium tabular-nums" data-testid="regenerating-elapsed">
+            {elapsed}s
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -483,6 +531,19 @@ function ImageCard({ item, index, sessionTitle, onPinToggle }: ImageCardProps) {
           <Download className="h-3 w-3" aria-hidden="true" />
           {isDownloading ? "Saving…" : "Download"}
         </button>
+        {/* Regenerate button (US-025) */}
+        {onRegenerate && (
+          <button
+            type="button"
+            onClick={() => onRegenerate(item)}
+            aria-label="Regenerate image"
+            data-testid="regenerate-btn"
+            className="flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-xs font-medium shadow hover:bg-background transition-colors"
+          >
+            <RefreshCw className="h-3 w-3" aria-hidden="true" />
+            Regen
+          </button>
+        )}
       </div>
     </div>
   );
@@ -512,6 +573,17 @@ interface MainPaneProps {
    * is re-attempted without affecting sibling slots.
    */
   onRetrySlot?: (slotIndex: number) => void;
+  /**
+   * US-025: Called when the user clicks Regenerate on an image card.
+   * Receives the ImageItem so the handler knows which image to regenerate.
+   * The new image is appended alongside the original.
+   */
+  onRegenerateItem?: (item: ImageItem) => void;
+  /**
+   * US-025: Set of ImageItem IDs currently being regenerated.
+   * Used to show the spinner card for each in-flight regeneration.
+   */
+  regeneratingItemIds?: Set<string>;
 }
 
 /**
@@ -519,8 +591,11 @@ interface MainPaneProps {
  * Shows skeleton cards while generation is in-flight (US-021).
  * Shows per-slot error cards for failed slots (US-022).
  * Shows an empty state when no generations exist.
+ *
+ * US-025: Passes onRegenerateItem and regeneratingItemIds to each ImageCard
+ * so the Regenerate button and per-item spinner work without affecting siblings.
  */
-function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults, onPinToggle, onRetrySlot }: MainPaneProps) {
+function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults, onPinToggle, onRetrySlot, onRegenerateItem, regeneratingItemIds }: MainPaneProps) {
   // While generation is in-flight, show skeleton placeholders (US-021).
   if (skeletonCount !== undefined && skeletonCount > 0) {
     return (
@@ -552,6 +627,8 @@ function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults
               index={i + 1}
               sessionTitle={sessionTitle}
               onPinToggle={onPinToggle}
+              onRegenerate={onRegenerateItem}
+              isRegenerating={regeneratingItemIds?.has(slot.item.id)}
             />
           ) : (
             <ErrorCard
@@ -614,6 +691,8 @@ function MainPane({ generations, items, sessionTitle, skeletonCount, slotResults
           index={i + 1}
           sessionTitle={sessionTitle}
           onPinToggle={onPinToggle}
+          onRegenerate={onRegenerateItem}
+          isRegenerating={regeneratingItemIds?.has(item.id)}
         />
       ))}
     </div>
@@ -672,6 +751,10 @@ export default function SessionView() {
   // Each entry is either a stored ImageItem or an error message for that slot.
   // Cleared when the next generation starts (replaced by skeleton cards).
   const [slotResults, setSlotResults] = useState<SlotResult[] | undefined>(undefined);
+
+  // US-025: Set of ImageItem IDs currently being regenerated.
+  // Each regeneration is independent; adding/removing an id does not affect other cards.
+  const [regeneratingItemIds, setRegeneratingItemIds] = useState<Set<string>>(new Set());
 
   // Selected image model (US-004): default to the first model in the list.
   const [selectedModel, setSelectedModel] = useState<ImageModelDef>(IMAGE_MODELS[0]);
@@ -967,6 +1050,112 @@ export default function SessionView() {
     }
   }, [id, data, prompt, guardAction, selectedModel, remixFile, refreshBalance]);
 
+  /**
+   * US-025: Regenerates a single existing image card.
+   *
+   * Fires a new generateImage call for the given item. The new image is stored
+   * as an additional ImageItem in the same generation and appended to the
+   * display list alongside the original — the old image is never removed.
+   *
+   * While regeneration is in-flight, the card for `item` shows a spinner with
+   * elapsed timer (isRegenerating=true). Sibling cards are unaffected.
+   */
+  const handleRegenerateItem = useCallback(async (item: ImageItem) => {
+    if (!id || !data) return;
+    // Guard: show modal and abort if no API key is configured.
+    if (!guardAction()) return;
+
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+
+    log({
+      category: "user:action",
+      action: "image:regenerate:start",
+      data: { sessionId: id, itemId: item.id },
+    });
+
+    // Mark this item as regenerating so its card shows the spinner.
+    setRegeneratingItemIds((prev) => new Set(prev).add(item.id));
+
+    try {
+      const musicSettings = getSettings();
+      const client = createLLMClient(musicSettings?.poeApiKey ?? undefined);
+
+      // Regenerate into the same generation as the source item so the new
+      // image appears alongside the original in the main pane.
+      const generationId = item.generationId;
+
+      let remixImageBase64: string | undefined;
+      if (remixFile) {
+        remixImageBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            resolve(dataUrl.split(",")[1]);
+          };
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(remixFile);
+        });
+      }
+
+      const result = await client.generateImage(
+        trimmed,
+        1,
+        selectedModel.id,
+        selectedModel.extraBody,
+        remixImageBase64
+      );
+
+      if (!isMounted.current) return;
+
+      const url = result[0];
+      // Store the new image in the same generation; it will appear alongside
+      // the original when the session data is reloaded below.
+      imageStorageService.createItem({ generationId, url });
+
+      // Refresh balance after successful regeneration (US-024).
+      refreshBalance(musicSettings?.poeApiKey);
+
+      // Reload session data so the new image is reflected in the main pane
+      // and thumbnail panel.
+      const updated = loadSession(id);
+      if (isMounted.current) {
+        setData(updated);
+        // Also update slotResults if they are currently shown, so the new
+        // item appears without waiting for the next full generation.
+        if (slotResults) {
+          const reloaded = imageStorageService.listItemsBySession(id ?? "");
+          const newItem = reloaded.find((i) => i.generationId === generationId && i.url === url);
+          if (newItem) {
+            setSlotResults((prev) => {
+              if (!prev) return prev;
+              return [...prev, { kind: "item", item: newItem }];
+            });
+          }
+        }
+      }
+    } catch (err) {
+      if (!isMounted.current) return;
+      const errMsg = err instanceof Error ? err.message : "Generation failed";
+      log({
+        category: "error",
+        action: "image:regenerate:error",
+        data: { sessionId: id, itemId: item.id, error: errMsg },
+      });
+      // On failure, the original image card reappears (spinner is removed)
+      // and a console error is recorded. No error card replaces the original.
+    } finally {
+      if (isMounted.current) {
+        // Remove this item from the regenerating set so the spinner is hidden.
+        setRegeneratingItemIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      }
+    }
+  }, [id, data, prompt, guardAction, selectedModel, remixFile, refreshBalance, slotResults]);
+
   if (!data) {
     return <Navigate to="/image" replace />;
   }
@@ -997,7 +1186,7 @@ export default function SessionView() {
             aria-label="Generated images"
             data-testid="main-pane"
           >
-            <MainPane generations={data.generations} items={data.items} sessionTitle={data.session.title} skeletonCount={skeletonCount} slotResults={slotResults} onPinToggle={handlePinToggle} onRetrySlot={handleRetrySlot} />
+            <MainPane generations={data.generations} items={data.items} sessionTitle={data.session.title} skeletonCount={skeletonCount} slotResults={slotResults} onPinToggle={handlePinToggle} onRetrySlot={handleRetrySlot} onRegenerateItem={handleRegenerateItem} regeneratingItemIds={regeneratingItemIds} />
           </main>
 
           {/* ── Thumbnail panel (desktop right panel) ──────────────────── */}
