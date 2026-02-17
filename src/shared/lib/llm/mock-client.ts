@@ -31,6 +31,14 @@ const imageUrlFixtures: string[] = JSON.parse(imageUrlsRaw) as string[];
 declare global {
   interface Window {
     __mockLLMImageFailCount?: number;
+    /**
+     * Testing hook: override the URL returned by MockLLMClient.generateAudio.
+     * Set to a string URL in a Playwright test to control the audio fixture URL
+     * returned to the caller (e.g. a URL that triggers the duration-rejection
+     * path when combined with a mocked HTMLAudioElement duration).
+     * Clear by setting to undefined after the test.
+     */
+    __mockLLMAudioUrl?: string;
   }
 }
 
@@ -93,6 +101,10 @@ export class MockLLMClient implements LLMClient {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async generateAudio(_text: string): Promise<string> {
     await this.delay();
+    // Testing hook: return a custom URL if set by a Playwright test.
+    if (typeof window !== "undefined" && window.__mockLLMAudioUrl !== undefined) {
+      return window.__mockLLMAudioUrl;
+    }
     return audioUrlFixture.trim();
   }
 }
