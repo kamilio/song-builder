@@ -2510,7 +2510,8 @@ function ShotModeView({
       });
     }
 
-    const promptText = shot.prompt;
+    const globalPrompt = script.settings.globalPrompt?.trim();
+    const promptText = globalPrompt ? `${globalPrompt}\n\n${shot.prompt}` : shot.prompt;
     const shotDuration = shot.duration;
     let successCount = 0;
 
@@ -2595,6 +2596,7 @@ function ShotModeView({
     shot.prompt,
     shot.duration,
     script.id,
+    script.settings.globalPrompt,
     isMountedRef,
     onUpdate,
     refreshBalance,
@@ -3623,6 +3625,8 @@ function VideoScriptViewInner() {
       settings: {
         subtitles: script.settings.subtitles,
         default_audio: script.settings.defaultAudio,
+        narration_enabled: script.settings.narrationEnabled,
+        global_prompt: script.settings.globalPrompt,
       },
       templates: Object.fromEntries(
         Object.entries(script.templates).map(([name, tmpl]) => [
