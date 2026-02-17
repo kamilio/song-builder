@@ -3780,7 +3780,7 @@ function VideoScriptViewInner() {
               role="tooltip"
             >
               <div className="rounded-md bg-foreground px-2.5 py-1.5 text-xs text-background whitespace-nowrap shadow-md max-w-xs text-center">
-                Final preview requires the export + Python script
+                Final preview requires exporting the YAML and running the Python generation script
               </div>
               <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-foreground" />
             </div>
