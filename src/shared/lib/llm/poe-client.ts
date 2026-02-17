@@ -81,12 +81,12 @@ export class PoeLLMClient implements LLMClient {
     return Promise.all(Array.from({ length: count }, makeRequest));
   }
 
-  async generateVideo(prompt: string): Promise<string> {
+  async generateVideo(prompt: string, duration?: number): Promise<string> {
     const response = await this.client.chat.completions.create({
       model: "veo-3.1",
       messages: [{ role: "user", content: prompt }],
       // @ts-expect-error extra_body is a Poe-specific extension not in the OpenAI types
-      extra_body: { size: "1792x1024", duration: "8" },
+      extra_body: { size: "1792x1024", duration: String(duration ?? 8) },
     });
 
     const videoUrl = response.choices[0]?.message?.content;

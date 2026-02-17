@@ -34,8 +34,9 @@ export interface LLMClient {
   /**
    * Submit a video prompt to the veo-3.1 model and return a publicly-accessible video URL.
    * @param prompt - text description of the desired video shot
+   * @param duration - optional clip duration in seconds; defaults to VIDEO_DURATIONS[0]
    */
-  generateVideo(prompt: string): Promise<string>;
+  generateVideo(prompt: string, duration?: number): Promise<string>;
 
   /**
    * Submit narration text to the elevenlabs-v3 model and return a publicly-accessible audio URL.

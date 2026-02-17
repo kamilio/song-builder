@@ -155,13 +155,6 @@ type GenerationSlotState =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/**
- * Default video clip duration in seconds (matches the veo-3.1 generation
- * setting duration: '8'). Used as the reference duration when validating
- * generated narration audio length.
- */
-const VIDEO_DURATION = 8;
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function generateId(): string {
@@ -910,7 +903,7 @@ function ShotCard({
 
       if (!isMountedRef.current) return;
 
-      if (durationS > VIDEO_DURATION) {
+      if (durationS > shot.duration) {
         const roundedS = Math.round(durationS * 10) / 10;
         const errorMsg = `Audio is too long (${roundedS}s). Shorten the narration text and regenerate.`;
         setAudioError(errorMsg);
@@ -1424,6 +1417,17 @@ function ShotCard({
             </button>
             <span className="text-xs font-medium text-muted-foreground">
               Subtitles
+            </span>
+          </div>
+
+          {/* Duration badge */}
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+              data-testid={`shot-duration-badge-${shot.id}`}
+            >
+              <Clock className="h-3 w-3" />
+              {shot.duration}s
             </span>
           </div>
 
@@ -2183,7 +2187,7 @@ function ShotModeView({
    * Generate ElevenLabs narration audio for this shot.
    * - Calls LLMClient.generateAudio(narrationText)
    * - Measures the audio duration using HTMLAudioElement
-   * - If duration > VIDEO_DURATION, rejects (does not store) and shows an error
+   * - If duration > shot.duration, rejects (does not store) and shows an error
    * - On success, stores the audioUrl in shot.narration.audioUrl
    * - refreshBalance is called after completion (success or rejection)
    * - isMounted ref guards all setState calls after await
@@ -2240,7 +2244,7 @@ function ShotModeView({
       if (!isMountedRef.current) return;
 
       // Reject if audio is longer than the clip duration
-      if (durationS > VIDEO_DURATION) {
+      if (durationS > shot.duration) {
         const roundedS = Math.round(durationS * 10) / 10;
         const errorMsg = `Audio is too long (${roundedS}s). Shorten the narration text and regenerate.`;
         setAudioError(errorMsg);
@@ -2291,6 +2295,7 @@ function ShotModeView({
   }, [
     isGeneratingAudio,
     shot.id,
+    shot.duration,
     shot.narration.text,
     script.id,
     script.shots,
@@ -2482,12 +2487,13 @@ function ShotModeView({
     }
 
     const promptText = shot.prompt;
+    const shotDuration = shot.duration;
     let successCount = 0;
 
     // Run all slots in parallel
     const slotPromises = initialSlots.map(async (slot) => {
       try {
-        const url = await client.generateVideo(promptText);
+        const url = await client.generateVideo(promptText, shotDuration);
         if (!isMountedRef.current) return;
 
         // Append to storage history
@@ -2562,6 +2568,7 @@ function ShotModeView({
     generateCount,
     shot.id,
     shot.prompt,
+    shot.duration,
     script.id,
     isMountedRef,
     onUpdate,
@@ -2610,7 +2617,7 @@ function ShotModeView({
       }
 
       try {
-        const url = await client.generateVideo(prompt);
+        const url = await client.generateVideo(prompt, shot.duration);
         if (!isMountedRef.current) return;
 
         const latestScript = videoStorageService.getScript(script.id);
@@ -2664,7 +2671,7 @@ function ShotModeView({
         }
       }
     },
-    [script.id, shot.id, isMountedRef, onUpdate, refreshBalance]
+    [script.id, shot.id, shot.duration, isMountedRef, onUpdate, refreshBalance]
   );
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -2910,6 +2917,49 @@ function ShotModeView({
               ].join(" ")}
             />
           </button>
+        </div>
+      </div>
+
+      {/* ── DURATION section ──────────────────────────────────────────────────── */}
+      <div className="space-y-2 pt-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+            Duration
+          </span>
+          <div
+            className="flex items-center rounded-md border border-border overflow-hidden"
+            role="group"
+            aria-label="Clip duration"
+            data-testid={`duration-picker-${shot.id}`}
+          >
+            {VIDEO_DURATIONS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => {
+                  const updatedShots = script.shots.map((s) =>
+                    s.id === shot.id ? { ...s, duration: d } : s
+                  );
+                  const updated = videoStorageService.updateScript(script.id, {
+                    shots: updatedShots,
+                  });
+                  if (updated) {
+                    onUpdate(updated);
+                  }
+                }}
+                className={[
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  d > VIDEO_DURATIONS[0] ? "border-l border-border" : "",
+                  shot.duration === d
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:text-foreground hover:bg-accent",
+                ].join(" ")}
+                aria-pressed={shot.duration === d}
+              >
+                {d}s
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -3552,6 +3602,7 @@ function VideoScriptViewInner() {
       shots: script.shots.map((shot) => ({
         title: shot.title,
         prompt: shot.prompt,
+        duration: shot.duration,
         subtitles: shot.subtitles,
         narration: {
           enabled: shot.narration.enabled,
@@ -3676,7 +3727,7 @@ function VideoScriptViewInner() {
   }
 
   const shotCount = script.shots.length;
-  const durationS = shotCount * 8;
+  const durationS = script.shots.reduce((sum, s) => sum + s.duration, 0);
 
   // Safe active shot (clamp to valid range)
   const safeActiveShotIndex = Math.min(

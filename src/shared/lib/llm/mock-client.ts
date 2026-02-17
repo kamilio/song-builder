@@ -93,7 +93,7 @@ export class MockLLMClient implements LLMClient {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async generateVideo(_prompt: string): Promise<string> {
+  async generateVideo(_prompt: string, _duration?: number): Promise<string> {
     await this.delay();
     return videoUrlFixture.trim();
   }
