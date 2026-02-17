@@ -6,13 +6,16 @@
  * Manages global template variables available across all scripts.
  * Templates are organized by category (Characters, Style, Scenery) with a
  * tab bar. Each template card shows the variable name as '{{name}}', the
- * value text, and Edit / Delete buttons.
+ * value text, Edit / Delete buttons, and "Used in" cross-script metadata.
  *
  * A '+ New Variable' button (top-right) opens a form without a pre-selected
  * category. Each category tab also has a contextual add button that opens the
  * same form with that tab's category pre-selected.
  *
- * Implements US-040.
+ * The "Used in" metadata is computed on every render of this page by scanning
+ * all script shot prompts via computeTemplateUsage().
+ *
+ * Implements US-040 (core template management) and US-060 ('Used in' metadata).
  */
 
 import { useState, useRef, useEffect, type FormEvent } from "react";
@@ -20,8 +23,9 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { videoStorageService } from "@/video/lib/storage/storageService";
-import type { GlobalTemplate, TemplateCategory } from "@/video/lib/storage/types";
+import type { GlobalTemplate, Script, TemplateCategory } from "@/video/lib/storage/types";
 import { log } from "@/music/lib/actionLog";
+import { computeTemplateUsage, formatTemplateUsage } from "@/video/lib/templateUsage";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -205,11 +209,15 @@ function TemplateForm({ initial, initialCategory, onSave, onCancel }: TemplateFo
 
 interface TemplateCardProps {
   template: GlobalTemplate;
+  /** Pre-computed usage lines for this template (from formatTemplateUsage). */
+  usageLines: string[];
   onEdit: (template: GlobalTemplate) => void;
   onDelete: (name: string) => void;
 }
 
-function TemplateCard({ template, onEdit, onDelete }: TemplateCardProps) {
+function TemplateCard({ template, usageLines, onEdit, onDelete }: TemplateCardProps) {
+  const isUnused = usageLines.length === 1 && usageLines[0] === "Not used in any script";
+
   return (
     <div
       className="rounded-lg border border-border bg-card p-4 flex flex-col gap-2 hover:shadow-sm hover:border-foreground/20 transition-all"
@@ -226,6 +234,27 @@ function TemplateCard({ template, onEdit, onDelete }: TemplateCardProps) {
       <p className="text-sm text-muted-foreground leading-snug line-clamp-3">
         {template.value}
       </p>
+
+      {/* 'Used in' cross-script metadata (US-060) */}
+      <div
+        className="mt-1"
+        data-testid={`template-usage-${template.name}`}
+        aria-label={`Usage of ${template.name}`}
+      >
+        {isUnused ? (
+          <p className="text-xs text-muted-foreground/60 italic">
+            Not used in any script
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {usageLines.map((line, i) => (
+              <li key={i} className="text-xs text-muted-foreground">
+                {line}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* Actions */}
       <div className="flex items-center gap-2 mt-auto pt-1 justify-end">
@@ -262,6 +291,10 @@ export default function VideoTemplates() {
   const [templates, setTemplates] = useState<GlobalTemplate[]>(() =>
     videoStorageService.listGlobalTemplates()
   );
+  // All scripts — loaded on every render to keep usage metadata fresh (US-060).
+  const [scripts, setScripts] = useState<Script[]>(() =>
+    videoStorageService.listScripts()
+  );
 
   // Form state: null = closed, { mode, initial, initialCategory }
   const [formState, setFormState] = useState<{
@@ -275,6 +308,8 @@ export default function VideoTemplates() {
 
   function reloadTemplates() {
     setTemplates(videoStorageService.listGlobalTemplates());
+    // Reload scripts too so usage metadata is always up-to-date
+    setScripts(videoStorageService.listScripts());
   }
 
   // ── Form handlers ────────────────────────────────────────────────────────
@@ -443,6 +478,9 @@ export default function VideoTemplates() {
                 <TemplateCard
                   key={template.name}
                   template={template}
+                  usageLines={formatTemplateUsage(
+                    computeTemplateUsage(template.name, scripts)
+                  )}
                   onEdit={openEditForm}
                   onDelete={handleDeleteRequest}
                 />
