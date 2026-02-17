@@ -135,6 +135,9 @@ import TemplateAutocomplete from "@/video/components/TemplateAutocomplete";
 type EditorMode = "write" | "shot" | "tmpl";
 type MobileTab = "script" | "chat";
 
+/** Three-state derived from all shots: on / off / mixed */
+type ToggleState = "on" | "off" | "mixed";
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -499,6 +502,66 @@ function AudioPlayer({ url, onDelete, dataTestIdPrefix }: AudioPlayerProps) {
   );
 }
 
+// ─── Subtitles state helpers ──────────────────────────────────────────────────
+
+function computeSubtitlesState(shots: Shot[]): ToggleState {
+  if (shots.length === 0) return "off";
+  const allOn = shots.every((s) => s.subtitles);
+  const allOff = shots.every((s) => !s.subtitles);
+  if (allOn) return "on";
+  if (allOff) return "off";
+  return "mixed";
+}
+
+// ─── MixedToggle ──────────────────────────────────────────────────────────────
+
+interface MixedToggleProps {
+  state: ToggleState;
+  onClick: () => void;
+  "data-testid": string;
+  "aria-label": string;
+}
+
+/**
+ * Toggle switch with three visual states: on, off, mixed.
+ *
+ * Visual:
+ *   on    → filled blue, dot at right
+ *   off   → grey, dot at left
+ *   mixed → primary/50, dot centred (indeterminate)
+ */
+function MixedToggle({
+  state,
+  onClick,
+  "data-testid": testId,
+  "aria-label": ariaLabel,
+}: MixedToggleProps) {
+  const isOn = state === "on";
+  const isMixed = state === "mixed";
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isOn ? true : isMixed ? "mixed" : false}
+      onClick={onClick}
+      className={[
+        "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+        isOn ? "bg-primary" : isMixed ? "bg-primary/50" : "bg-input",
+      ].join(" ")}
+      data-testid={testId}
+      aria-label={ariaLabel}
+    >
+      <span
+        className={[
+          "pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform",
+          isOn ? "translate-x-3" : isMixed ? "translate-x-1.5" : "translate-x-0",
+        ].join(" ")}
+      />
+    </button>
+  );
+}
+
 // ─── ShotCard ─────────────────────────────────────────────────────────────────
 
 interface ShotCardProps {
@@ -716,6 +779,26 @@ function ShotCard({
         category: "user:action",
         action: "video:shot:narration:toggle",
         data: { scriptId: script.id, shotId: shot.id, enabled: newEnabled },
+      });
+      onUpdate(updated);
+    }
+  }
+
+  // ── Subtitles toggle (Write mode card) ─────────────────────────────────────
+
+  function handleShotSubtitlesToggle() {
+    const newSubtitles = !shot.subtitles;
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id ? { ...s, subtitles: newSubtitles } : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated) {
+      log({
+        category: "user:action",
+        action: "video:shot:subtitles:toggle",
+        data: { scriptId: script.id, shotId: shot.id, subtitles: newSubtitles },
       });
       onUpdate(updated);
     }
@@ -1305,6 +1388,32 @@ function ShotCard({
                 )}
               </div>
             )}
+          </div>
+
+          {/* Subtitles toggle (Write mode card indicator) */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={shot.subtitles}
+              onClick={handleShotSubtitlesToggle}
+              className={[
+                "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+                shot.subtitles ? "bg-primary" : "bg-input",
+              ].join(" ")}
+              data-testid={`shot-subtitles-toggle-${shot.id}`}
+              aria-label="Toggle subtitles"
+            >
+              <span
+                className={[
+                  "pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform",
+                  shot.subtitles ? "translate-x-3" : "translate-x-0",
+                ].join(" ")}
+              />
+            </button>
+            <span className="text-xs font-medium text-muted-foreground">
+              Subtitles
+            </span>
           </div>
 
           {/* Selected video pill */}
@@ -2196,6 +2305,26 @@ function ShotModeView({
     }
   }
 
+  // ── Subtitles toggle (per-shot) ────────────────────────────────────────────
+
+  function handleShotSubtitlesToggle() {
+    const newSubtitles = !shot.subtitles;
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id ? { ...s, subtitles: newSubtitles } : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      log({
+        category: "user:action",
+        action: "video:shot:subtitles:toggle",
+        data: { scriptId: script.id, shotId: shot.id, subtitles: newSubtitles },
+      });
+      onUpdate(updated);
+    }
+  }
+
   // ── Video history actions ─────────────────────────────────────────────────
 
   function handleSelectVideo(url: string) {
@@ -2743,6 +2872,34 @@ function ShotModeView({
             )}
           </div>
         )}
+      </div>
+
+      {/* ── SUBTITLES section ─────────────────────────────────────────────────── */}
+      <div className="space-y-2 pt-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+            Subtitles
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={shot.subtitles}
+            onClick={handleShotSubtitlesToggle}
+            className={[
+              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+              shot.subtitles ? "bg-primary" : "bg-input",
+            ].join(" ")}
+            data-testid={`shot-subtitles-toggle-${shot.id}`}
+            aria-label="Toggle subtitles for this shot"
+          >
+            <span
+              className={[
+                "pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform",
+                shot.subtitles ? "translate-x-3" : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
+        </div>
       </div>
 
       {/* ── GENERATE section ──────────────────────────────────────────────────── */}
@@ -3316,16 +3473,26 @@ function VideoScriptViewInner() {
     [script]
   );
 
-  // ─── Subtitles toggle ─────────────────────────────────────────────────────
+  // ─── Subtitles toggle (global — mixed-state logic) ────────────────────────
+  // off → set all on; on → set all off; mixed → set all on
   const handleSubtitlesToggle = useCallback(() => {
     if (!script) return;
+    const state = computeSubtitlesState(script.shots);
+    const newEnabled = state !== "on";
+    const updatedShots = script.shots.map((s) => ({
+      ...s,
+      subtitles: newEnabled,
+    }));
     const updated = videoStorageService.updateScript(script.id, {
-      settings: {
-        ...script.settings,
-        subtitles: !script.settings.subtitles,
-      },
+      shots: updatedShots,
+      settings: { ...script.settings, subtitles: newEnabled },
     });
     if (updated && isMounted.current) {
+      log({
+        category: "user:action",
+        action: "video:script:subtitles:global",
+        data: { scriptId: script.id, newEnabled },
+      });
       setScript(updated);
     }
   }, [script]);
@@ -3350,6 +3517,7 @@ function VideoScriptViewInner() {
       shots: script.shots.map((shot) => ({
         title: shot.title,
         prompt: shot.prompt,
+        subtitles: shot.subtitles,
         narration: {
           enabled: shot.narration.enabled,
           text: shot.narration.text,
@@ -3482,6 +3650,15 @@ function VideoScriptViewInner() {
   );
   const activeShot =
     mode === "shot" ? script.shots[safeActiveShotIndex] : null;
+
+  // Subtitles mixed-state for global toggle
+  const subtitlesState = computeSubtitlesState(script.shots);
+  const subtitlesLabel =
+    subtitlesState === "mixed"
+      ? "Subtitles (mixed)"
+      : subtitlesState === "on"
+      ? "Subtitles on"
+      : "Subtitles off";
 
   // Panel header label
   const headerLabel =
@@ -3740,31 +3917,18 @@ function VideoScriptViewInner() {
       >
         {/* Left: Subtitles toggle + shot info + shot mode prev/next */}
         <div className="flex items-center gap-3 text-sm flex-wrap">
-          {/* Subtitles toggle */}
-          <button
-            type="button"
-            onClick={handleSubtitlesToggle}
-            className={[
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium border transition-colors",
-              script.settings.subtitles
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent",
-            ].join(" ")}
-            aria-pressed={script.settings.subtitles}
-            data-testid="subtitles-toggle"
-            aria-label={`Subtitles ${script.settings.subtitles ? "on" : "off"}`}
-          >
-            <span
-              className={[
-                "w-3 h-3 rounded-full border",
-                script.settings.subtitles
-                  ? "bg-primary border-primary"
-                  : "border-current",
-              ].join(" ")}
-              aria-hidden="true"
+          {/* Subtitles toggle — global MixedToggle */}
+          <div className="flex items-center gap-1.5">
+            <MixedToggle
+              state={subtitlesState}
+              onClick={handleSubtitlesToggle}
+              data-testid="subtitles-toggle"
+              aria-label={subtitlesLabel}
             />
-            Subtitles
-          </button>
+            <span className="text-xs font-medium text-muted-foreground">
+              Subtitles
+            </span>
+          </div>
 
           {/* Shot count + duration */}
           <span className="text-xs text-muted-foreground" data-testid="shot-duration-label">
