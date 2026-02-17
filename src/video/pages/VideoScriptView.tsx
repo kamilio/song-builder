@@ -6,15 +6,20 @@
  * US-041: Script editor shell — layout, mode toggle, chat panel.
  * US-042: Script editor — Write mode shot cards.
  * US-043: Drag-and-drop shot reordering in Write mode.
+ * US-044: Script editor — Shot mode.
  *
  * Layout:
  *   - Desktop: split-pane (left script panel, right chat panel)
  *   - Mobile (< 768px): tab bar toggling Script / Chat panels
  *
- * Left panel header: 'SCRIPT' label + mode toggle [Write●][Shot○][Tmpl○] + '+ Shot'
+ * Left panel header:
+ *   - Write/Tmpl mode: 'SCRIPT' label + mode toggle + '+ Shot'
+ *   - Shot mode: 'SHOT N OF M' label + mode toggle + '+ Shot'
+ *
  * Right panel: 'CHAT' label + scrollable message history + message input
  *
  * Bottom bar: Subtitles toggle, shot count + duration, ▶ Preview All (disabled), ⬇ Export Video
+ *   - Shot mode: also has prev/next shot navigation buttons
  *
  * Write mode shot cards (US-042):
  *   - Full shot card per shot: drag handle, header, prompt textarea, template chips,
@@ -27,6 +32,16 @@
  *   - onDragEnd reorders the shots array and persists to storage.
  *   - Shot number labels are index-based; they update immediately after drop.
  *   - Keyboard drag: Space to pick up, arrow keys to move, Space/Enter to drop.
+ *
+ * Shot mode (US-044):
+ *   - Zooms into a single shot for focused editing.
+ *   - Header shows 'SHOT N OF M'; navigation row with prev/next.
+ *   - Tiptap editor renders prompt with {{variable}} as styled inline chip nodes.
+ *   - Template chips row (local templates only); autocomplete on '{{' input.
+ *   - Narration section with enable toggle, textarea, audio source radio.
+ *   - Generate section: count selector [1][2][3], Generate button.
+ *   - Video history grid with inline <video>, version label, timestamp, actions.
+ *   - Bottom bar includes prev/next navigation equivalent to header row.
  *
  * Safety:
  *   - Redirects to /video/scripts when script ID is not found.
@@ -42,6 +57,7 @@ import {
   useCallback,
   FormEvent,
   KeyboardEvent,
+  type MutableRefObject,
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -61,6 +77,14 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import {
+  Node as TiptapNode,
+  mergeAttributes,
+  type NodeViewRendererProps,
+} from "@tiptap/core";
+import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import {
   Plus,
   MessageSquare,
@@ -76,6 +100,11 @@ import {
   X,
   GripVertical,
   CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Pin,
+  Clock,
 } from "lucide-react";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
@@ -83,7 +112,12 @@ import { Button } from "@/shared/components/ui/button";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { getSettings } from "@/music/lib/storage";
 import { videoStorageService } from "@/video/lib/storage/storageService";
-import type { Script, Shot, AudioSource } from "@/video/lib/storage/types";
+import type {
+  Script,
+  Shot,
+  AudioSource,
+  VideoHistoryEntry,
+} from "@/video/lib/storage/types";
 import { createLLMClient } from "@/shared/lib/llm/factory";
 import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 import { dump as yamlDump } from "js-yaml";
@@ -132,6 +166,140 @@ function extractFilename(url: string): string {
   // Fall back to last path segment of raw string
   const parts = url.split("/");
   return parts[parts.length - 1] || url.slice(0, 24);
+}
+
+/**
+ * Format a relative timestamp (e.g. "2m ago", "just now").
+ */
+function formatRelativeTime(isoString: string): string {
+  const now = Date.now();
+  const then = new Date(isoString).getTime();
+  const diffMs = now - then;
+  if (diffMs < 60_000) return "just now";
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
+  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
+  return `${Math.floor(diffMs / 86_400_000)}d ago`;
+}
+
+// ─── Tiptap TemplateChip node ─────────────────────────────────────────────────
+
+/**
+ * Inline node that renders {{variable_name}} as a styled chip.
+ * Atomic: backspace deletes the whole node.
+ */
+const TemplateChipNode = TiptapNode.create({
+  name: "templateChip",
+  group: "inline",
+  inline: true,
+  atom: true,
+
+  addAttributes() {
+    return {
+      name: {
+        default: null,
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-template-chip]',
+        getAttrs: (element) => ({
+          name: (element as HTMLElement).getAttribute("data-template-name"),
+        }),
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "span",
+      mergeAttributes(HTMLAttributes, {
+        "data-template-chip": "",
+        "data-template-name": HTMLAttributes.name,
+        class:
+          "inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0 text-xs font-medium text-primary mx-0.5 select-none",
+      }),
+      `{{${HTMLAttributes.name as string}}}`,
+    ];
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(TemplateChipNodeView);
+  },
+});
+
+function TemplateChipNodeView({ node }: NodeViewRendererProps) {
+  const name = node.attrs.name as string;
+  return (
+    <NodeViewWrapper
+      as="span"
+      className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0 text-xs font-medium text-primary mx-0.5 select-none cursor-default"
+      data-template-chip=""
+      data-template-name={name}
+    >
+      {`{{${name}}}`}
+    </NodeViewWrapper>
+  );
+}
+
+// ─── Helper: prompt string → tiptap content JSON ──────────────────────────────
+
+/**
+ * Parse a prompt string (with {{name}} occurrences) into a tiptap doc JSON
+ * where each {{name}} becomes a templateChip node.
+ */
+function promptToTiptapContent(prompt: string): object {
+  const parts: object[] = [];
+  const regex = /\{\{([^}]+)\}\}/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(prompt)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({
+        type: "text",
+        text: prompt.slice(lastIndex, match.index),
+      });
+    }
+    parts.push({
+      type: "templateChip",
+      attrs: { name: match[1] },
+    });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < prompt.length) {
+    parts.push({ type: "text", text: prompt.slice(lastIndex) });
+  }
+  if (parts.length === 0) {
+    parts.push({ type: "text", text: "" });
+  }
+
+  return {
+    type: "doc",
+    content: [{ type: "paragraph", content: parts }],
+  };
+}
+
+/**
+ * Convert tiptap doc JSON back to a plain prompt string.
+ * templateChip nodes become {{name}}.
+ */
+function tiptapContentToPrompt(content: { type: string; content?: object[] }): string {
+  if (!content || !content.content) return "";
+  function traverse(nodes: object[]): string {
+    return nodes
+      .map((node: object) => {
+        const n = node as { type: string; text?: string; attrs?: { name?: string }; content?: object[] };
+        if (n.type === "text") return n.text ?? "";
+        if (n.type === "templateChip") return `{{${n.attrs?.name ?? ""}}}`;
+        if (n.content) return traverse(n.content);
+        return "";
+      })
+      .join("");
+  }
+  return traverse(content.content as object[]);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -729,6 +897,793 @@ function ShotCard({
   );
 }
 
+// ─── ShotModeView ─────────────────────────────────────────────────────────────
+
+interface ShotModeViewProps {
+  shot: Shot;
+  shotIndex: number;
+  script: Script;
+  onUpdate: (updatedScript: Script) => void;
+  onNavigate: (newIndex: number) => void;
+  isMountedRef: MutableRefObject<boolean>;
+}
+
+/**
+ * Detailed editor for a single shot (US-044).
+ *
+ * Sections:
+ *   1. Tiptap prompt editor with {{variable}} chip nodes + autocomplete
+ *   2. Template chips row (local templates only)
+ *   3. NARRATION section
+ *   4. GENERATE section (count selector + Generate button)
+ *   5. VIDEO HISTORY grid
+ */
+function ShotModeView({
+  shot,
+  shotIndex,
+  script,
+  onUpdate,
+  onNavigate,
+  isMountedRef,
+}: ShotModeViewProps) {
+  const totalShots = script.shots.length;
+
+  // ── Narration local state ──────────────────────────────────────────────────
+  const [narrationText, setNarrationText] = useState(shot.narration.text);
+  const [generateCount, setGenerateCount] = useState(1);
+
+  // ── Confirm delete for history entries ────────────────────────────────────
+  const [confirmDeleteIndex, setConfirmDeleteIndex] = useState<number | null>(null);
+
+  // ── Autocomplete state ────────────────────────────────────────────────────
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  const [autocompleteQuery, setAutocompleteQuery] = useState("");
+  const autocompleteRef = useRef<HTMLDivElement>(null);
+
+  // Sync narrationText when shot changes (navigating shots)
+  useEffect(() => {
+    setNarrationText(shot.narration.text);
+  }, [shot.id, shot.narration.text]);
+
+  // ── Tiptap editor ──────────────────────────────────────────────────────────
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        // Disable block nodes we don't need
+        blockquote: false,
+        codeBlock: false,
+        heading: false,
+        horizontalRule: false,
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        hardBreak: false,
+      }),
+      TemplateChipNode,
+    ],
+    content: promptToTiptapContent(shot.prompt),
+    onUpdate: ({ editor: ed }) => {
+      const json = ed.getJSON();
+      const text = tiptapContentToPrompt(json as { type: string; content?: object[] });
+
+      // Detect '{{' typed to open autocomplete
+      const currentText = ed.getText();
+      const selection = ed.state.selection;
+      const textBefore = currentText.slice(0, selection.anchor - 1);
+      const lastDoubleOpen = textBefore.lastIndexOf("{{");
+      if (lastDoubleOpen !== -1) {
+        const query = textBefore.slice(lastDoubleOpen + 2);
+        if (!query.includes("}")) {
+          setAutocompleteOpen(true);
+          setAutocompleteQuery(query);
+        } else {
+          setAutocompleteOpen(false);
+        }
+      } else {
+        setAutocompleteOpen(false);
+      }
+
+      // Persist on change (debounced by blur in production; here we persist immediately)
+      // We persist on every change for the tiptap editor to keep storage in sync
+      void persistPrompt(text);
+    },
+    editorProps: {
+      attributes: {
+        class:
+          "min-h-[80px] px-3 py-2 text-sm focus:outline-none prose prose-sm max-w-none",
+        "data-testid": "shot-prompt-tiptap",
+      },
+    },
+  });
+
+  // Persist function (not debounced — called on each tiptap change)
+  const persistPrompt = useCallback(
+    (newPrompt: string) => {
+      if (!isMountedRef.current) return;
+      if (newPrompt === shot.prompt) return;
+      const updatedShots = script.shots.map((s) =>
+        s.id === shot.id ? { ...s, prompt: newPrompt } : s
+      );
+      const updated = videoStorageService.updateScript(script.id, {
+        shots: updatedShots,
+      });
+      if (updated && isMountedRef.current) {
+        onUpdate(updated);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [script.id, shot.id, shot.prompt]
+  );
+
+  // Re-initialise editor content when navigating to a different shot
+  useEffect(() => {
+    if (!editor) return;
+    const newContent = promptToTiptapContent(shot.prompt);
+    // Only reset if shot changed (avoid resetting while user is typing)
+    editor.commands.setContent(newContent as Parameters<typeof editor.commands.setContent>[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shot.id]);
+
+  // Close autocomplete on outside click
+  useEffect(() => {
+    if (!autocompleteOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (
+        autocompleteRef.current &&
+        !autocompleteRef.current.contains(e.target as Node)
+      ) {
+        setAutocompleteOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [autocompleteOpen]);
+
+  // Handle Escape key to close autocomplete
+  useEffect(() => {
+    if (!autocompleteOpen) return;
+    function handleKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") {
+        setAutocompleteOpen(false);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [autocompleteOpen]);
+
+  // ── Insert template via autocomplete ──────────────────────────────────────
+
+  function insertTemplateFromAutocomplete(name: string) {
+    if (!editor) return;
+    setAutocompleteOpen(false);
+
+    // Delete the '{{...' text typed so far, then insert the chip
+    const json = editor.getJSON();
+    const text = tiptapContentToPrompt(json as { type: string; content?: object[] });
+    const selection = editor.state.selection;
+    const textBefore = text.slice(0, selection.anchor - 1);
+    const lastDoubleOpen = textBefore.lastIndexOf("{{");
+    if (lastDoubleOpen !== -1) {
+      // Delete from '{{' to cursor
+      const deleteFrom = lastDoubleOpen + 1; // position in tiptap doc (1-indexed)
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: deleteFrom, to: selection.anchor })
+        .insertContent({
+          type: "templateChip",
+          attrs: { name },
+        })
+        .run();
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: "templateChip",
+          attrs: { name },
+        })
+        .run();
+    }
+  }
+
+  // ── Template chip click (chips row) ──────────────────────────────────────
+
+  function insertTemplateChip(name: string) {
+    if (!editor) return;
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: "templateChip",
+        attrs: { name },
+      })
+      .run();
+  }
+
+  // ── Local template chips (all local templates, not just referenced ones) ──
+  const localTemplates = Object.values(script.templates).filter(
+    (tmpl) => !tmpl.global
+  );
+
+  // ── Global templates ──────────────────────────────────────────────────────
+  const [globalTemplates, setGlobalTemplates] = useState(() =>
+    videoStorageService.listGlobalTemplates()
+  );
+
+  // Refresh global templates when the component mounts or shot changes
+  useEffect(() => {
+    setGlobalTemplates(videoStorageService.listGlobalTemplates());
+  }, [shot.id]);
+
+  // ── Filtered autocomplete items ──────────────────────────────────────────
+
+  const filteredLocalTemplates = localTemplates.filter((t) =>
+    t.name.toLowerCase().startsWith(autocompleteQuery.toLowerCase())
+  );
+  const filteredGlobalTemplates = globalTemplates.filter((t) =>
+    t.name.toLowerCase().startsWith(autocompleteQuery.toLowerCase())
+  );
+
+  // ── Narration handlers ────────────────────────────────────────────────────
+
+  function handleNarrationToggle() {
+    const newEnabled = !shot.narration.enabled;
+    const newAudioSource: AudioSource =
+      newEnabled && !shot.narration.audioSource
+        ? script.settings.defaultAudio
+        : shot.narration.audioSource || script.settings.defaultAudio;
+
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? {
+            ...s,
+            narration: {
+              ...s.narration,
+              enabled: newEnabled,
+              audioSource: newAudioSource,
+            },
+          }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      onUpdate(updated);
+    }
+  }
+
+  function handleNarrationTextBlur() {
+    if (narrationText === shot.narration.text) return;
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? { ...s, narration: { ...s.narration, text: narrationText } }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      onUpdate(updated);
+    }
+  }
+
+  function handleAudioSourceChange(source: AudioSource) {
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? { ...s, narration: { ...s.narration, audioSource: source } }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      onUpdate(updated);
+    }
+  }
+
+  // ── Video history actions ─────────────────────────────────────────────────
+
+  function handleSelectVideo(url: string) {
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? { ...s, video: { ...s.video, selectedUrl: url } }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      onUpdate(updated);
+    }
+  }
+
+  function handlePinVideo(index: number) {
+    const entry = shot.video.history[index];
+    if (!entry) return;
+    const isPinned = entry.pinned;
+    const updatedHistory: VideoHistoryEntry[] = shot.video.history.map((e, i) =>
+      i === index
+        ? {
+            ...e,
+            pinned: !isPinned,
+            pinnedAt: !isPinned ? new Date().toISOString() : undefined,
+          }
+        : e
+    );
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? { ...s, video: { ...s.video, history: updatedHistory } }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      onUpdate(updated);
+    }
+  }
+
+  function handleDownloadVideo(url: string) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = extractFilename(url);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function handleDeleteVideo(index: number) {
+    const entry = shot.video.history[index];
+    if (!entry) return;
+    const updatedHistory = shot.video.history.filter((_, i) => i !== index);
+    const newSelectedUrl =
+      shot.video.selectedUrl === entry.url ? null : shot.video.selectedUrl;
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? {
+            ...s,
+            video: {
+              selectedUrl: newSelectedUrl,
+              history: updatedHistory,
+            },
+          }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      onUpdate(updated);
+      setConfirmDeleteIndex(null);
+    }
+  }
+
+  // ─── Render ──────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-4" data-testid="shot-mode-content">
+
+      {/* ── Navigation row ─────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-2">
+        {/* Prev shot */}
+        {shotIndex > 0 ? (
+          <button
+            type="button"
+            onClick={() => onNavigate(shotIndex - 1)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="shot-prev-btn"
+            aria-label={`Go to shot ${shotIndex}`}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Shot {shotIndex} · {script.shots[shotIndex - 1]?.title ?? ""}
+          </button>
+        ) : (
+          <div />
+        )}
+        {/* Next shot */}
+        {shotIndex < totalShots - 1 ? (
+          <button
+            type="button"
+            onClick={() => onNavigate(shotIndex + 1)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="shot-next-btn"
+            aria-label={`Go to shot ${shotIndex + 2}`}
+          >
+            Shot {shotIndex + 2} · {script.shots[shotIndex + 1]?.title ?? ""}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <div />
+        )}
+      </div>
+
+      {/* ── Prompt section ───────────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-muted-foreground">
+          Video prompt
+        </label>
+
+        {/* Tiptap editor wrapper */}
+        <div className="relative rounded-md border border-border focus-within:ring-1 focus-within:ring-ring bg-background">
+          <EditorContent editor={editor} />
+
+          {/* Autocomplete dropdown */}
+          {autocompleteOpen &&
+            (filteredLocalTemplates.length > 0 ||
+              filteredGlobalTemplates.length > 0) && (
+              <div
+                ref={autocompleteRef}
+                className="absolute left-0 top-full mt-1 z-50 min-w-[200px] max-w-[320px] rounded-md border border-border bg-background shadow-lg py-1"
+                data-testid="template-autocomplete"
+              >
+                {/* Script templates section */}
+                {filteredLocalTemplates.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
+                      Script Templates
+                    </div>
+                    {filteredLocalTemplates.map((tmpl) => (
+                      <button
+                        key={tmpl.name}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          insertTemplateFromAutocomplete(tmpl.name);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
+                        data-testid={`autocomplete-local-${tmpl.name}`}
+                      >
+                        <span className="font-mono text-primary text-xs">{`{{${tmpl.name}}}`}</span>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {tmpl.value.slice(0, 40)}
+                        </span>
+                      </button>
+                    ))}
+                    {filteredGlobalTemplates.length > 0 && (
+                      <div className="my-1 border-t border-border" />
+                    )}
+                  </>
+                )}
+
+                {/* Global templates section */}
+                {filteredGlobalTemplates.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
+                      Global Templates
+                    </div>
+                    {filteredGlobalTemplates.map((tmpl) => (
+                      <button
+                        key={tmpl.name}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          insertTemplateFromAutocomplete(tmpl.name);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
+                        data-testid={`autocomplete-global-${tmpl.name}`}
+                      >
+                        <span className="font-mono text-primary text-xs">{`{{${tmpl.name}}}`}</span>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {tmpl.value.slice(0, 40)}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+        </div>
+
+        {/* Template chips row — local templates only */}
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {localTemplates.map((tmpl) => (
+            <button
+              key={tmpl.name}
+              type="button"
+              onClick={() => insertTemplateChip(tmpl.name)}
+              className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+              data-testid={`shot-mode-template-chip-${tmpl.name}`}
+              title={`Insert {{${tmpl.name}}}`}
+            >
+              {`{{${tmpl.name}}}`}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              const event = new CustomEvent("switch-to-templates");
+              document.dispatchEvent(event);
+            }}
+            className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            data-testid="shot-mode-template-add-chip"
+          >
+            +add
+          </button>
+        </div>
+      </div>
+
+      {/* ── NARRATION section ─────────────────────────────────────────────────── */}
+      <div className="space-y-2 pt-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+            Narration
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={shot.narration.enabled}
+            onClick={handleNarrationToggle}
+            className={[
+              "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+              shot.narration.enabled ? "bg-primary" : "bg-input",
+            ].join(" ")}
+            data-testid={`shot-mode-narration-toggle`}
+            aria-label="Toggle narration"
+          >
+            <span
+              className={[
+                "pointer-events-none inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform",
+                shot.narration.enabled ? "translate-x-3" : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
+        </div>
+
+        {shot.narration.enabled && (
+          <div className="space-y-2">
+            <Textarea
+              value={narrationText}
+              onChange={(e) => setNarrationText(e.target.value)}
+              onBlur={handleNarrationTextBlur}
+              placeholder="Enter narration text…"
+              rows={2}
+              className="resize-none text-sm"
+              data-testid="shot-mode-narration-text"
+              aria-label="Narration text"
+            />
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs text-muted-foreground shrink-0">
+                Audio:
+              </span>
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input
+                  type="radio"
+                  name="shot-mode-audio-source"
+                  value="video"
+                  checked={shot.narration.audioSource === "video"}
+                  onChange={() => handleAudioSourceChange("video")}
+                  className="h-3 w-3"
+                  data-testid="shot-mode-audio-video"
+                />
+                Video
+              </label>
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input
+                  type="radio"
+                  name="shot-mode-audio-source"
+                  value="elevenlabs"
+                  checked={shot.narration.audioSource === "elevenlabs"}
+                  onChange={() => handleAudioSourceChange("elevenlabs")}
+                  className="h-3 w-3"
+                  data-testid="shot-mode-audio-elevenlabs"
+                />
+                ElevenLabs
+              </label>
+
+              {shot.narration.audioSource === "elevenlabs" && (
+                <button
+                  type="button"
+                  className="ml-auto flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border border-border bg-background hover:bg-accent transition-colors"
+                  data-testid="shot-mode-generate-audio-btn"
+                  aria-label="Generate narration audio"
+                >
+                  Generate Audio
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── GENERATE section ──────────────────────────────────────────────────── */}
+      <div className="space-y-2 pt-1">
+        <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+          Generate
+        </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Count selector button group */}
+          <div
+            className="flex items-center rounded-md border border-border overflow-hidden"
+            role="group"
+            aria-label="Number of videos to generate"
+          >
+            {[1, 2, 3].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setGenerateCount(n)}
+                className={[
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  n > 1 ? "border-l border-border" : "",
+                  generateCount === n
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:text-foreground hover:bg-accent",
+                ].join(" ")}
+                data-testid={`generate-count-${n}`}
+                aria-pressed={generateCount === n}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+
+          {/* Generate button */}
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            data-testid="generate-btn"
+            aria-label={`Generate ${generateCount} video${generateCount > 1 ? "s" : ""}`}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Generate
+          </button>
+        </div>
+      </div>
+
+      {/* ── VIDEO HISTORY section ─────────────────────────────────────────────── */}
+      <div className="space-y-2 pt-1">
+        <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+          Video History
+        </span>
+
+        {shot.video.history.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">
+            No videos generated yet. Click Generate to create your first clip.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {shot.video.history.map((entry, idx) => {
+              const isSelected = shot.video.selectedUrl === entry.url;
+              return (
+                <div
+                  key={entry.url}
+                  className={[
+                    "relative rounded-lg border overflow-hidden",
+                    isSelected
+                      ? "border-primary ring-1 ring-primary"
+                      : "border-border",
+                  ].join(" ")}
+                  data-testid={`video-history-card-${idx}`}
+                >
+                  {/* Video thumbnail */}
+                  <div className="relative aspect-video bg-muted">
+                    <video
+                      src={entry.url}
+                      preload="metadata"
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                      onMouseEnter={(e) => void (e.currentTarget as HTMLVideoElement).play()}
+                      onMouseLeave={(e) => {
+                        const v = e.currentTarget as HTMLVideoElement;
+                        v.pause();
+                        v.currentTime = 0;
+                      }}
+                    />
+                    {/* Pin overlay */}
+                    {entry.pinned && (
+                      <div className="absolute top-1.5 left-1.5 flex items-center justify-center rounded-full bg-background/80 p-1">
+                        <Pin className="h-3 w-3 text-foreground" />
+                      </div>
+                    )}
+                    {/* Version label */}
+                    <div className="absolute top-1.5 right-1.5 rounded-md bg-background/80 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+                      v{idx + 1}
+                    </div>
+                  </div>
+
+                  {/* Card footer */}
+                  <div className="px-2 py-1.5 space-y-1.5 bg-background">
+                    {/* Timestamp */}
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {formatRelativeTime(entry.generatedAt)}
+                    </div>
+
+                    {/* Actions row */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {/* Select / Selected */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          isSelected ? undefined : handleSelectVideo(entry.url)
+                        }
+                        className={[
+                          "flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium border transition-colors",
+                          isSelected
+                            ? "border-primary bg-primary/10 text-primary cursor-default"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent",
+                        ].join(" ")}
+                        data-testid={`video-select-btn-${idx}`}
+                        aria-label={
+                          isSelected ? "Selected video" : `Select video v${idx + 1}`
+                        }
+                        aria-pressed={isSelected}
+                      >
+                        {isSelected ? (
+                          <>
+                            <Check className="h-3 w-3" />
+                            Selected
+                          </>
+                        ) : (
+                          "Select"
+                        )}
+                      </button>
+
+                      {/* Pin button */}
+                      <button
+                        type="button"
+                        onClick={() => handlePinVideo(idx)}
+                        className={[
+                          "flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] border transition-colors",
+                          entry.pinned
+                            ? "border-amber-400 bg-amber-50 text-amber-600 hover:bg-amber-100"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent",
+                        ].join(" ")}
+                        data-testid={`video-pin-btn-${idx}`}
+                        aria-label={entry.pinned ? "Unpin video" : "Pin video"}
+                        aria-pressed={entry.pinned}
+                      >
+                        📌
+                      </button>
+
+                      {/* Download button */}
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadVideo(entry.url)}
+                        className="flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        data-testid={`video-download-btn-${idx}`}
+                        aria-label={`Download video v${idx + 1}`}
+                      >
+                        ⬇
+                      </button>
+
+                      {/* Delete button */}
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteIndex(idx)}
+                        className="flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] border border-border bg-background text-muted-foreground hover:text-destructive hover:border-destructive/50 hover:bg-destructive/10 transition-colors"
+                        data-testid={`video-delete-btn-${idx}`}
+                        aria-label={`Delete video v${idx + 1}`}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Confirm delete dialog for video history */}
+      {confirmDeleteIndex !== null && (
+        <ConfirmDialog
+          title="Delete video?"
+          description="This will permanently remove this video from the history. This cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => handleDeleteVideo(confirmDeleteIndex)}
+          onCancel={() => setConfirmDeleteIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Main page component ──────────────────────────────────────────────────────
 
 function VideoScriptViewInner() {
@@ -742,6 +1697,7 @@ function VideoScriptViewInner() {
 
   // ─── Editor state ──────────────────────────────────────────────────────────
   const [mode, setMode] = useState<EditorMode>("write");
+  const [activeShotIndex, setActiveShotIndex] = useState(0);
   const [mobileTab, setMobileTab] = useState<MobileTab>("script");
 
   // ─── Chat state ───────────────────────────────────────────────────────────
@@ -843,9 +1799,16 @@ function VideoScriptViewInner() {
       });
       if (updated && isMounted.current) {
         setScript(updated);
+        // Adjust active shot index if needed
+        if (mode === "shot") {
+          const deletedIndex = script.shots.findIndex((s) => s.id === shotId);
+          if (deletedIndex !== -1 && activeShotIndex >= deletedIndex) {
+            setActiveShotIndex(Math.max(0, activeShotIndex - 1));
+          }
+        }
       }
     },
-    [script]
+    [script, mode, activeShotIndex]
   );
 
   // ─── Handle script update from shot card ─────────────────────────────────
@@ -856,15 +1819,43 @@ function VideoScriptViewInner() {
   }, []);
 
   // ─── Switch to Shot mode at a given index ─────────────────────────────────
-  // shotIndex will be used in US-044 to set the active shot; accepted as parameter
-  // to satisfy the interface contract expected by ShotCard.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleSwitchToShotMode = useCallback((_shotIndex: number) => {
-    // US-044 will wire up active shot index; for now just switch mode
-    if (isMounted.current) {
-      setMode("shot");
-    }
-  }, []);
+  const handleSwitchToShotMode = useCallback(
+    (shotIndex: number) => {
+      if (isMounted.current) {
+        setActiveShotIndex(shotIndex);
+        setMode("shot");
+      }
+    },
+    []
+  );
+
+  // ─── Navigate within Shot mode ────────────────────────────────────────────
+  const handleShotNavigate = useCallback(
+    (newIndex: number) => {
+      if (!script) return;
+      if (newIndex < 0 || newIndex >= script.shots.length) return;
+      if (isMounted.current) {
+        setActiveShotIndex(newIndex);
+      }
+    },
+    [script]
+  );
+
+  // ─── Mode change ──────────────────────────────────────────────────────────
+  const handleModeChange = useCallback(
+    (newMode: EditorMode) => {
+      if (isMounted.current) {
+        setMode(newMode);
+        // When switching to Shot mode, clamp index to valid range
+        if (newMode === "shot" && script) {
+          setActiveShotIndex((prev) =>
+            Math.min(prev, Math.max(0, script.shots.length - 1))
+          );
+        }
+      }
+    },
+    [script]
+  );
 
   // ─── Drag-and-drop sensors (US-043) ──────────────────────────────────────
   const sensors = useSensors(
@@ -1049,6 +2040,20 @@ function VideoScriptViewInner() {
   const shotCount = script.shots.length;
   const durationS = shotCount * 8;
 
+  // Safe active shot (clamp to valid range)
+  const safeActiveShotIndex = Math.min(
+    activeShotIndex,
+    Math.max(0, shotCount - 1)
+  );
+  const activeShot =
+    mode === "shot" ? script.shots[safeActiveShotIndex] : null;
+
+  // Panel header label
+  const headerLabel =
+    mode === "shot" && shotCount > 0
+      ? `Shot ${safeActiveShotIndex + 1} of ${shotCount}`
+      : "Script";
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]" data-testid="script-editor">
@@ -1106,12 +2111,15 @@ function VideoScriptViewInner() {
           data-testid="script-panel"
         >
           {/* Panel header */}
-          <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border bg-background shrink-0">
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border bg-background shrink-0"
+            data-testid="shot-mode-header"
+          >
             <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-              Script
+              {headerLabel}
             </span>
             <div className="flex items-center gap-2">
-              <ModeToggle mode={mode} onChange={setMode} />
+              <ModeToggle mode={mode} onChange={handleModeChange} />
               <button
                 type="button"
                 onClick={handleAddShot}
@@ -1178,14 +2186,25 @@ function VideoScriptViewInner() {
               </div>
             )}
             {mode === "shot" && (
-              <div
-                className="flex flex-col items-center justify-center h-32 gap-2 text-center"
-                data-testid="shot-mode-content"
-              >
-                <p className="text-sm text-muted-foreground">
-                  Shot mode — coming in the next story (US-044).
-                </p>
-              </div>
+              <>
+                {shotCount === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-32 gap-2 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No shots yet. Click <strong>+ Shot</strong> to add the first one.
+                    </p>
+                  </div>
+                ) : activeShot ? (
+                  <ShotModeView
+                    key={activeShot.id}
+                    shot={activeShot}
+                    shotIndex={safeActiveShotIndex}
+                    script={script}
+                    onUpdate={handleShotUpdate}
+                    onNavigate={handleShotNavigate}
+                    isMountedRef={isMounted}
+                  />
+                ) : null}
+              </>
             )}
             {mode === "tmpl" && (
               <div
@@ -1286,8 +2305,8 @@ function VideoScriptViewInner() {
         className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-border bg-background shrink-0 flex-wrap gap-y-2"
         data-testid="editor-bottom-bar"
       >
-        {/* Left: Subtitles toggle + shot info */}
-        <div className="flex items-center gap-3 text-sm">
+        {/* Left: Subtitles toggle + shot info + shot mode prev/next */}
+        <div className="flex items-center gap-3 text-sm flex-wrap">
           {/* Subtitles toggle */}
           <button
             type="button"
@@ -1318,6 +2337,35 @@ function VideoScriptViewInner() {
           <span className="text-xs text-muted-foreground" data-testid="shot-duration-label">
             {shotCount} {shotCount === 1 ? "shot" : "shots"} · ~{durationS}s
           </span>
+
+          {/* Shot mode prev/next navigation in bottom bar */}
+          {mode === "shot" && shotCount > 0 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handleShotNavigate(safeActiveShotIndex - 1)}
+                disabled={safeActiveShotIndex === 0}
+                className="flex items-center justify-center rounded-md px-2 py-1 text-xs border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                data-testid="shot-prev-btn-bottom"
+                aria-label="Previous shot"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {safeActiveShotIndex + 1}/{shotCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleShotNavigate(safeActiveShotIndex + 1)}
+                disabled={safeActiveShotIndex === shotCount - 1}
+                className="flex items-center justify-center rounded-md px-2 py-1 text-xs border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                data-testid="shot-next-btn-bottom"
+                aria-label="Next shot"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: Preview All (disabled) + Export Video */}
