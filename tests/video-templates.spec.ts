@@ -144,7 +144,7 @@ test.describe("US-056: Templates flows (global and local)", () => {
     await expect(mayaCard).toBeVisible();
 
     // Verify we are on (or can switch to) the Characters tab and it shows Maya
-    const charactersTab = page.getByTestId("templates-tab-character");
+    const charactersTab = page.getByTestId("templates-tab-characters");
     await expect(charactersTab).toBeVisible();
     await charactersTab.click();
     await expect(mayaCard).toBeVisible();

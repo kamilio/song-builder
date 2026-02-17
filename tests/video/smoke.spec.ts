@@ -63,7 +63,7 @@ test.describe("Video feature smoke test (US-051)", () => {
   }) => {
     await page.goto("/video/templates");
 
-    await expect(page.getByTestId("templates-tab-character")).toBeVisible();
+    await expect(page.getByTestId("templates-tab-characters")).toBeVisible();
     await expect(page.getByTestId("new-variable-btn")).toBeVisible();
   });
 

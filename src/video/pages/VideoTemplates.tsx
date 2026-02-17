@@ -31,10 +31,10 @@ import { computeTemplateUsage, formatTemplateUsage } from "@/video/lib/templateU
 
 type Tab = "character" | "style" | "scenery";
 
-const TABS: { id: Tab; label: string; addLabel: string }[] = [
-  { id: "character", label: "Characters", addLabel: "+ Add Character" },
-  { id: "style",     label: "Style",      addLabel: "+ Add Style"     },
-  { id: "scenery",   label: "Scenery",    addLabel: "+ Add Scenery"   },
+const TABS: { id: Tab; label: string; addLabel: string; testId: string }[] = [
+  { id: "character", label: "Characters", addLabel: "+ Add Character", testId: "templates-tab-characters" },
+  { id: "style",     label: "Style",      addLabel: "+ Add Style",     testId: "templates-tab-style"      },
+  { id: "scenery",   label: "Scenery",    addLabel: "+ Add Scenery",   testId: "templates-tab-scenery"    },
 ];
 
 // ─── TemplateForm ─────────────────────────────────────────────────────────────
@@ -424,7 +424,7 @@ export default function VideoTemplates() {
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
               }`}
-              data-testid={`templates-tab-${tab.id}`}
+              data-testid={tab.testId}
             >
               {tab.label}
               {count > 0 && (

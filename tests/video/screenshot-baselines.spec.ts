@@ -602,7 +602,7 @@ test(
     await page.waitForLoadState("networkidle");
 
     // Characters tab is active by default; Maya should be visible
-    await expect(page.getByTestId("templates-tab-character")).toBeVisible();
+    await expect(page.getByTestId("templates-tab-characters")).toBeVisible();
     await expect(page.getByTestId("template-card-Maya")).toBeVisible();
 
     await expect(page).toHaveScreenshot("video-templates-desktop.png", {
@@ -621,7 +621,7 @@ test(
     await page.goto("/video/templates");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByTestId("templates-tab-character")).toBeVisible();
+    await expect(page.getByTestId("templates-tab-characters")).toBeVisible();
     await expect(page.getByTestId("template-card-Maya")).toBeVisible();
 
     await expect(page).toHaveScreenshot("video-templates-mobile.png", {
