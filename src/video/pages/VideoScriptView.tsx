@@ -107,6 +107,9 @@ import {
   Pin,
   Clock,
   Info,
+  Wrench,
+  AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
@@ -130,6 +133,9 @@ import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 import { dump as yamlDump } from "js-yaml";
 import TemplateAutocomplete from "@/video/components/TemplateAutocomplete";
 import { TemplateDialog } from "@/video/components/TemplateDialog";
+import { CHAT_TOOLS } from "@/video/lib/chatTools";
+import { applyToolCall } from "@/video/lib/applyToolCall";
+import type { ToolCall } from "@/shared/lib/llm/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -143,6 +149,8 @@ interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Tool calls emitted in this assistant response (undefined for user/plain messages). */
+  toolCalls?: ToolCall[];
 }
 
 /**
@@ -404,14 +412,167 @@ function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
     );
   }
 
+  const toolCalls = message.toolCalls ?? [];
+
   return (
-    <div className="flex justify-start">
-      <div
-        className="max-w-[85%] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm bg-muted text-foreground border border-border"
-        data-testid={`chat-message-assistant-${message.id}`}
-      >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+    <div className="flex flex-col gap-2 items-start w-full">
+      {/* Assistant text bubble (only when there is text) */}
+      {message.content && (
+        <div
+          className="max-w-[85%] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm bg-muted text-foreground border border-border"
+          data-testid={`chat-message-assistant-${message.id}`}
+        >
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        </div>
+      )}
+      {/* No text, no tool calls — still render the bubble to avoid invisible messages */}
+      {!message.content && toolCalls.length === 0 && (
+        <div
+          className="max-w-[85%] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm bg-muted text-foreground border border-border"
+          data-testid={`chat-message-assistant-${message.id}`}
+        >
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        </div>
+      )}
+      {/* Tool call cards — rendered in order after the text bubble */}
+      {toolCalls.map((tc, idx) => (
+        <ToolCallCard
+          key={tc.id}
+          toolCall={tc}
+          isError={!KNOWN_TOOL_NAMES.has(tc.name)}
+          index={idx}
+          messageId={message.id}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── ToolCallCard ─────────────────────────────────────────────────────────────
+
+/** Known tool names shipped with the plan. */
+const KNOWN_TOOL_NAMES = new Set([
+  "update_shot_prompt",
+  "update_shot_narration",
+  "update_shot_subtitles",
+  "add_shot",
+  "delete_shot",
+  "reorder_shots",
+  "update_script_settings",
+]);
+
+/**
+ * Return a human-readable summary for a tool call.
+ * e.g. "update_shot_prompt" → "Updated prompt for shot"
+ */
+function toolCallDisplayName(
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
+  switch (toolName) {
+    case "update_shot_prompt":
+      return `Updated prompt for shot`;
+    case "update_shot_narration":
+      return `Updated narration for shot`;
+    case "update_shot_subtitles":
+      return `Updated subtitles for shot`;
+    case "add_shot": {
+      const title = typeof args.title === "string" ? args.title : "";
+      return title ? `Added shot "${title}"` : "Added shot";
+    }
+    case "delete_shot":
+      return `Deleted shot`;
+    case "reorder_shots":
+      return `Reordered shots`;
+    case "update_script_settings":
+      return `Updated script settings`;
+    default:
+      return toolName;
+  }
+}
+
+interface ToolCallCardProps {
+  toolCall: ToolCall;
+  /** If true, renders the error (unknown tool) variant. */
+  isError?: boolean;
+  /** Unique index to ensure stable test IDs within a message. */
+  index: number;
+  /** Parent message ID for stable data-testid generation. */
+  messageId: string;
+}
+
+/**
+ * Expandable card displaying a single tool call result.
+ * Shows display name, tool icon, and collapsible JSON args.
+ * The error variant is used for unknown or failed tool calls.
+ */
+function ToolCallCard({ toolCall, isError, index, messageId }: ToolCallCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const displayName = isError
+    ? `Unknown tool: ${toolCall.name}`
+    : toolCallDisplayName(toolCall.name, toolCall.args);
+
+  return (
+    <div
+      className={[
+        "rounded-lg border text-sm",
+        isError
+          ? "border-destructive/40 bg-destructive/5"
+          : "border-border bg-muted/50",
+      ].join(" ")}
+      data-testid={`tool-call-card-${messageId}-${index}`}
+    >
+      {/* Card header */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        {isError ? (
+          <AlertTriangle
+            className="h-3.5 w-3.5 shrink-0 text-destructive"
+            data-testid={`tool-call-error-icon-${messageId}-${index}`}
+          />
+        ) : (
+          <Wrench
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            data-testid={`tool-call-icon-${messageId}-${index}`}
+          />
+        )}
+        <span
+          className={[
+            "flex-1 font-medium",
+            isError ? "text-destructive" : "text-foreground",
+          ].join(" ")}
+          data-testid={`tool-call-name-${messageId}-${index}`}
+        >
+          {displayName}
+        </span>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse args" : "Expand args"}
+          data-testid={`tool-call-toggle-${messageId}-${index}`}
+        >
+          <ChevronDown
+            className={[
+              "h-3.5 w-3.5 transition-transform",
+              expanded ? "rotate-180" : "",
+            ].join(" ")}
+          />
+        </button>
       </div>
+
+      {/* Expandable JSON args */}
+      {expanded && (
+        <div
+          className="border-t border-border px-3 py-2"
+          data-testid={`tool-call-args-${messageId}-${index}`}
+        >
+          <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all font-mono">
+            {JSON.stringify(toolCall.args, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
@@ -3521,12 +3682,33 @@ function VideoScriptViewInner() {
         const apiKey = settings?.poeApiKey;
         const client = createLLMClient(apiKey ?? undefined);
 
-        // Build context: include script info as system context
+        // Build full script context system message per US-083 spec.
         const systemContext = script
-          ? `You are a creative assistant helping the user develop a video script. The current script is titled "${script.title}" and has ${script.shots.length} shot(s).`
+          ? [
+              "You are a creative assistant helping the user develop a video script.",
+              "You have access to tools to directly modify the script — use them when the user asks to change the script.",
+              "",
+              `Script title: ${script.title}`,
+              `Created: ${script.createdAt}`,
+              "",
+              "Settings:",
+              `  narrationEnabled: ${String(script.settings.narrationEnabled)}`,
+              `  subtitles: ${String(script.settings.subtitles)}`,
+              `  globalPrompt: ${script.settings.globalPrompt || "(empty)"}`,
+              "",
+              `Shots (${script.shots.length}):`,
+              ...script.shots.map((s, idx) =>
+                [
+                  `  Shot ${idx + 1}: id=${s.id}, title="${s.title}"`,
+                  `    prompt: ${s.prompt || "(empty)"}`,
+                  `    narration: enabled=${String(s.narration.enabled)}, text="${s.narration.text || ""}", audioSource=${s.narration.audioSource}`,
+                  `    subtitles: ${String(s.subtitles)}, duration: ${s.duration}s`,
+                ].join("\n")
+              ),
+            ].join("\n")
           : "You are a creative assistant helping the user develop a video script.";
 
-        const response = await client.chat(
+        const response = await client.chatWithTools(
           [
             { role: "system" as const, content: systemContext },
             ...chatMessages.map((m) => ({
@@ -3535,14 +3717,34 @@ function VideoScriptViewInner() {
             })),
             { role: "user" as const, content: trimmed },
           ],
+          CHAT_TOOLS,
           "claude-sonnet-4-5-20250929"
         );
 
-        if (isMounted.current) {
+        if (isMounted.current && script) {
+          // Apply each tool call in order and persist to storage.
+          let currentScript = script;
+          for (const tc of response.toolCalls) {
+            if (KNOWN_TOOL_NAMES.has(tc.name)) {
+              currentScript = applyToolCall(currentScript, tc.name, tc.args);
+            }
+          }
+          // Persist if any known tool calls were applied.
+          if (response.toolCalls.some((tc) => KNOWN_TOOL_NAMES.has(tc.name))) {
+            const persisted = videoStorageService.updateScript(currentScript.id, {
+              shots: currentScript.shots,
+              settings: currentScript.settings,
+            });
+            if (persisted && isMounted.current) {
+              setScript(persisted);
+            }
+          }
+
           const assistantMsg: ChatMessage = {
             id: generateId(),
             role: "assistant",
-            content: response,
+            content: response.text,
+            toolCalls: response.toolCalls.length > 0 ? response.toolCalls : undefined,
           };
           setChatMessages((prev) => [...prev, assistantMsg]);
           refreshBalance(apiKey);
