@@ -97,10 +97,6 @@ test.describe("US-067: Sub-routes and breadcrumb navigation", () => {
     // The script-editor div is the container; and shot mode renders ShotModeView
     await expect(page.getByTestId("script-editor")).toBeVisible();
 
-    // Mode toggle shows Shot as active
-    const shotToggle = page.getByTestId("mode-toggle-shot");
-    await expect(shotToggle).toContainText("●");
-
     // Breadcrumb: "Scripts" › "Breadcrumb Test Script" › "Opening Shot"
     const breadcrumb = page.getByTestId("breadcrumb");
     await expect(breadcrumb).toBeVisible();

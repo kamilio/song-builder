@@ -54,7 +54,7 @@ const LONG_AUDIO_URL = "mock://long-audio-fixture";
 
 /**
  * Seeds:
- *  - A global template named "globalVarName" (category: character)
+ *  - A global template named "globalVarName"
  *  - A script with 2 shots:
  *      - Shot 1: one pinned VideoHistoryEntry
  *      - Shot 2: prompt contains {{globalVarName}}; narration enabled; ElevenLabs
@@ -85,7 +85,6 @@ async function seedExportScript(
         JSON.stringify([
           {
             name: args.globalVarName,
-            category: "character",
             value: "a heroic character description for testing",
             global: true,
           },
@@ -264,21 +263,11 @@ test.describe("US-065: YAML export round-trip and narration audio rejection", ()
     await page.goto("/");
     const { scriptId, shot2Id, previousAudioUrl } = await seedExportScript(page);
 
-    // ── Navigate to script editor and switch to Shot mode ────────────────────
-    await page.goto(`/video/scripts/${scriptId}`);
+    // ── Navigate directly to shot 2 ───────────────────────────────────────────
+    await page.goto(`/video/scripts/${scriptId}/${shot2Id}`);
 
     const scriptPanel = page.getByTestId("script-panel");
     await expect(scriptPanel).toBeVisible();
-
-    // Switch to Shot mode
-    const shotModeToggle = page.getByTestId("mode-toggle-shot");
-    await expect(shotModeToggle).toBeVisible();
-    await shotModeToggle.click();
-
-    // Navigate to shot 2 (index 1) — it has narration enabled + ElevenLabs
-    const nextBtn = page.getByTestId("shot-next-btn");
-    await expect(nextBtn).toBeVisible();
-    await nextBtn.click();
 
     // Confirm we're on shot 2 of 2
     const shotModeHeader = page.getByTestId("shot-mode-header");

@@ -146,7 +146,7 @@ test.describe("US-055: Shot mode, video generation, and take management", () => 
   }) => {
     // ── Seed storage ──────────────────────────────────────────────────────────
     await page.goto("/");
-    const { scriptId, shot2Id, preExistingVideoUrl } = await seedScript(page);
+    const { scriptId, shot1Id, shot2Id, preExistingVideoUrl } = await seedScript(page);
 
     // ── Navigate to editor ────────────────────────────────────────────────────
     await page.goto(`/video/scripts/${scriptId}`);
@@ -155,10 +155,8 @@ test.describe("US-055: Shot mode, video generation, and take management", () => 
     const scriptPanel = page.getByTestId("script-panel");
     await expect(scriptPanel).toBeVisible();
 
-    // ── Step 1: Click Shot mode toggle; assert header "SHOT 1 OF 3" ──────────
-    const shotModeToggle = page.getByTestId("mode-toggle-shot");
-    await expect(shotModeToggle).toBeVisible();
-    await shotModeToggle.click();
+    // ── Step 1: Navigate directly to shot 1; assert header "SHOT 1 OF 3" ─────
+    await page.goto(`/video/scripts/${scriptId}/${shot1Id}`);
 
     // Header should read "Shot 1 of 3" (case-insensitive partial match)
     const shotModeHeader = page.getByTestId("shot-mode-header");

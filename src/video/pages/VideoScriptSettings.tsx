@@ -42,11 +42,10 @@ import type {
   Script,
   Shot,
   LocalTemplate,
-  TemplateCategory,
 } from "@/video/lib/storage/types";
 import type { GlobalTemplate } from "@/video/lib/storage/types";
 import TemplateAutocomplete from "@/video/components/TemplateAutocomplete";
-import { TemplateDialog } from "@/video/components/TemplateDialog";
+import { TemplateDialog, type TemplateScope } from "@/video/components/TemplateDialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,25 +126,15 @@ interface LocalTemplateCardProps {
 }
 
 function LocalTemplateCard({ template, onEdit, onDelete }: LocalTemplateCardProps) {
-  const categoryLabel =
-    template.category === "character"
-      ? "Characters"
-      : template.category === "style"
-      ? "Style"
-      : "Scenery";
-
   return (
     <div
       className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 hover:shadow-sm hover:border-foreground/20 transition-all"
       data-testid={`settings-template-card-${template.name}`}
     >
-      {/* Variable name chip + category */}
+      {/* Variable name chip */}
       <div className="flex items-start justify-between gap-2">
         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-primary/10 text-primary border border-primary/20">
           {`{{${template.name}}}`}
-        </span>
-        <span className="text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-          {categoryLabel}
         </span>
       </div>
 
@@ -359,27 +348,41 @@ function VideoScriptSettingsInner() {
     setFormState({ mode: "edit", initial: template });
   }
 
-  function handleFormSave(data: { name: string; category: TemplateCategory; value: string }) {
+  function handleFormSave(data: { name: string; value: string; scope: TemplateScope }) {
     if (!script) return;
     const isEdit = formState?.mode === "edit";
-    const newTemplate: LocalTemplate = {
-      name: data.name,
-      category: data.category,
-      value: data.value,
-      global: false,
-    };
-    const updatedTemplates: Record<string, LocalTemplate> = {
-      ...script.templates,
-      [data.name]: newTemplate,
-    };
-    const updated = videoStorageService.updateScript(script.id, {
-      templates: updatedTemplates,
-    });
-    persistAndSetScript(updated);
+
+    if (data.scope === "global") {
+      // Move to global storage
+      videoStorageService.createGlobalTemplate({ name: data.name, value: data.value });
+      // Remove from local templates if it existed there
+      const updatedTemplates = { ...script.templates };
+      delete updatedTemplates[data.name];
+      const updated = videoStorageService.updateScript(script.id, {
+        templates: updatedTemplates,
+      });
+      persistAndSetScript(updated);
+    } else {
+      // Save as local template
+      const newTemplate: LocalTemplate = {
+        name: data.name,
+        value: data.value,
+        global: false,
+      };
+      const updatedTemplates: Record<string, LocalTemplate> = {
+        ...script.templates,
+        [data.name]: newTemplate,
+      };
+      const updated = videoStorageService.updateScript(script.id, {
+        templates: updatedTemplates,
+      });
+      persistAndSetScript(updated);
+    }
+
     log({
       category: "user:action",
       action: isEdit ? "video:template:local:edit" : "video:template:local:create",
-      data: { scriptId: script.id, name: data.name },
+      data: { scriptId: script.id, name: data.name, scope: data.scope },
     });
     setFormState(null);
   }
@@ -631,6 +634,7 @@ function VideoScriptSettingsInner() {
       {formState !== null && (
         <TemplateDialog
           initial={formState.initial}
+          initialScope="local"
           testIdPrefix="settings-template"
           onSave={handleFormSave}
           onCancel={handleFormCancel}

@@ -1,6 +1,5 @@
 export type {
   AudioSource,
-  TemplateCategory,
   VideoHistoryEntry,
   ShotNarration,
   ShotVideo,

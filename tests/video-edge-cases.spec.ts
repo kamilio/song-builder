@@ -294,22 +294,12 @@ test.describe("US-057: Error paths, empty states, and mobile layout", () => {
 
     // Seed a script for the editor
     await page.goto("/");
-    const { scriptId } = await seedScript(page);
+    const { scriptId, shotId } = await seedScript(page);
 
-    // Navigate to the script editor — this produces navigation action log entries
-    await page.goto(`/video/scripts/${scriptId}`);
+    // Navigate directly to shot mode — this produces navigation action log entries
+    await page.goto(`/video/scripts/${scriptId}/${shotId}`);
 
-    // Wait for editor to load
-    const scriptPanel = page.getByTestId("script-panel");
-    await expect(scriptPanel).toBeVisible();
-
-    // Perform a video:* action to ensure at least one video:* event is in the log.
-    // Click the Shot mode toggle (triggers video:mode:change).
-    const shotModeToggle = page.getByTestId("mode-toggle-shot");
-    await expect(shotModeToggle).toBeVisible();
-    await shotModeToggle.click();
-
-    // Verify Shot mode header appeared (confirms the action was registered)
+    // Verify Shot mode header appeared
     const shotModeHeader = page.getByTestId("shot-mode-header");
     await expect(shotModeHeader).toContainText(/shot 1 of 1/i);
 

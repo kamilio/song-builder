@@ -91,7 +91,15 @@ function migrateScript(raw: Script): Script {
   // Backfill templates: older scripts written before the templates field was
   // added may not have it. Default to an empty record to prevent crashes in
   // code that calls Object.values(script.templates).
-  const templates: Script["templates"] = raw.templates ?? {};
+  // Also strip legacy `category` field from existing templates.
+  const rawTemplates = raw.templates ?? {};
+  const templates: Script["templates"] = Object.fromEntries(
+    Object.entries(rawTemplates).map(([k, v]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = v as any;
+      return [k, { name: raw.name as string, value: raw.value as string, global: false as const }];
+    })
+  );
   return { ...raw, settings, shots, templates };
 }
 
@@ -185,7 +193,14 @@ export function listScripts(): Script[] {
 // ─── Global Templates ─────────────────────────────────────────────────────────
 
 function getGlobalTemplatesRaw(): GlobalTemplate[] {
-  return readJSON<GlobalTemplate[]>(KEYS.globalTemplates) ?? [];
+  const raw = readJSON<GlobalTemplate[]>(KEYS.globalTemplates) ?? [];
+  // Strip legacy `category` field from existing global templates.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return raw.map((t: any) => ({
+    name: t.name as string,
+    value: t.value as string,
+    global: true as const,
+  }));
 }
 
 /**

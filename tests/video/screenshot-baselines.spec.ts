@@ -222,7 +222,6 @@ async function seedEditorScript(page: Page): Promise<string> {
             templates: {
               character: {
                 name: "character",
-                category: "character",
                 value: "Commander Nova, a seasoned astronaut",
                 global: false,
               },
@@ -255,13 +254,11 @@ async function seedGlobalTemplates(page: Page): Promise<void> {
       JSON.stringify([
         {
           name: "Maya",
-          category: "character",
           value: "a young woman with curly auburn hair and bright green eyes",
           global: true,
         },
         {
           name: "cinematic_style",
-          category: "style",
           value: "cinematic, anamorphic lens, golden hour lighting, film grain",
           global: true,
         },
@@ -541,14 +538,8 @@ test(
     await page.setViewportSize(DESKTOP);
     await resetAndSeedApiKey(page);
     const scriptId = await seedEditorScript(page);
-    await page.goto(`/video/scripts/${scriptId}`);
+    await page.goto(`/video/scripts/${scriptId}/${SHOT_2_ID}`);
     await page.waitForLoadState("networkidle");
-
-    // Switch to Shot mode
-    await page.getByTestId("mode-toggle-shot").click();
-
-    // Navigate to shot 2 (index 1)
-    await page.getByTestId("shot-next-btn").click();
 
     // Assert we are on shot 2 with 2 history entries
     await expect(page.getByTestId("shot-mode-header")).toContainText(
@@ -570,14 +561,8 @@ test(
     await page.setViewportSize(MOBILE);
     await resetAndSeedApiKey(page);
     const scriptId = await seedEditorScript(page);
-    await page.goto(`/video/scripts/${scriptId}`);
+    await page.goto(`/video/scripts/${scriptId}/${SHOT_2_ID}`);
     await page.waitForLoadState("networkidle");
-
-    // Switch to Shot mode
-    await page.getByTestId("mode-toggle-shot").click();
-
-    // Navigate to shot 2
-    await page.getByTestId("shot-next-btn").click();
 
     await expect(page.getByTestId("shot-mode-header")).toContainText(
       /shot 2 of 3/i
@@ -601,8 +586,7 @@ test(
     await page.goto("/video/templates");
     await page.waitForLoadState("networkidle");
 
-    // Characters tab is active by default; Maya should be visible
-    await expect(page.getByTestId("templates-tab-characters")).toBeVisible();
+    // Maya should be visible in the flat template list
     await expect(page.getByTestId("template-card-Maya")).toBeVisible();
 
     await expect(page).toHaveScreenshot("video-templates-desktop.png", {
@@ -621,7 +605,6 @@ test(
     await page.goto("/video/templates");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByTestId("templates-tab-characters")).toBeVisible();
     await expect(page.getByTestId("template-card-Maya")).toBeVisible();
 
     await expect(page).toHaveScreenshot("video-templates-mobile.png", {

@@ -105,10 +105,6 @@ test.describe("US-053: Script creation and editor navigation", () => {
     await expect(panelHeader).toBeVisible();
     await expect(panelHeader).toContainText("Script");
 
-    // Mode toggle should be present (write mode button)
-    const modeToggleWrite = page.getByTestId("mode-toggle-write");
-    await expect(modeToggleWrite).toBeVisible();
-
     // Right panel: "CHAT" heading
     const chatPanel = page.getByTestId("chat-panel");
     await expect(chatPanel).toBeVisible();

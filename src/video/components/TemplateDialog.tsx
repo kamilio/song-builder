@@ -7,7 +7,7 @@
  *   - /video/scripts/:id/settings   (Variables section in VideoScriptSettings)
  *   - /video/templates              (global VideoTemplates page)
  *
- * Fields: Name, Category (character/style/scenery), Value (textarea).
+ * Fields: Name, Value (textarea), and optionally a Local/Global scope toggle.
  * Edit mode: modal pre-fills existing values and makes Name read-only.
  * Cancel button and Escape close without saving.
  * Submit button label: "Save Template".
@@ -16,27 +16,21 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import type { TemplateCategory } from "@/video/lib/storage/types";
-
-// ─── Category tabs ─────────────────────────────────────────────────────────────
-
-const CATEGORY_TABS: { id: TemplateCategory; label: string }[] = [
-  { id: "character", label: "Characters" },
-  { id: "style",     label: "Style" },
-  { id: "scenery",   label: "Scenery" },
-];
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
+
+export type TemplateScope = "local" | "global";
 
 export interface TemplateDialogProps {
   /** If provided, the dialog is in edit mode and pre-fills with these values. */
   initial?: {
     name: string;
-    category: TemplateCategory;
     value: string;
   };
-  /** Pre-selected category (used in create mode when no initial is provided). */
-  initialCategory?: TemplateCategory;
+  /** Initial scope selection (default: "local"). */
+  initialScope?: TemplateScope;
+  /** Whether to show the local/global scope toggle. Default: true. */
+  showScopeToggle?: boolean;
   /**
    * Prefix for data-testid attributes.
    * e.g. "local-template" → testids: "local-template-name-input", etc.
@@ -44,7 +38,7 @@ export interface TemplateDialogProps {
    */
   testIdPrefix?: string;
   /** Called when the user submits the form with valid data. */
-  onSave: (data: { name: string; category: TemplateCategory; value: string }) => void;
+  onSave: (data: { name: string; value: string; scope: TemplateScope }) => void;
   /** Called when the user cancels (Cancel button, Escape key, or backdrop click). */
   onCancel: () => void;
 }
@@ -53,15 +47,14 @@ export interface TemplateDialogProps {
 
 export function TemplateDialog({
   initial,
-  initialCategory,
+  initialScope = "local",
+  showScopeToggle = true,
   testIdPrefix = "template-dialog",
   onSave,
   onCancel,
 }: TemplateDialogProps) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [category, setCategory] = useState<TemplateCategory>(
-    initial?.category ?? initialCategory ?? "character"
-  );
+  const [scope, setScope] = useState<TemplateScope>(initialScope);
   const [value, setValue] = useState(initial?.value ?? "");
   const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -105,7 +98,7 @@ export function TemplateDialog({
     }
 
     setError(null);
-    onSave({ name: trimmedName, category, value: trimmedValue });
+    onSave({ name: trimmedName, value: trimmedValue, scope });
   }
 
   const errorId = `${testIdPrefix}-error`;
@@ -170,28 +163,35 @@ export function TemplateDialog({
             />
           </div>
 
-          {/* Category */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Category</label>
-            <div className="flex gap-2">
-              {CATEGORY_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setCategory(tab.id)}
-                  className={`flex-1 py-1.5 text-sm rounded border transition-colors ${
-                    category === tab.id
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "border-border text-muted-foreground hover:bg-accent"
-                  }`}
-                  aria-pressed={category === tab.id}
-                  data-testid={`${testIdPrefix}-category-${tab.id}`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+          {/* Scope toggle */}
+          {showScopeToggle && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Scope</label>
+              <div className="flex gap-2">
+                {(["local", "global"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setScope(s)}
+                    className={`flex-1 py-1.5 text-sm rounded border transition-colors ${
+                      scope === s
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-accent"
+                    }`}
+                    aria-pressed={scope === s}
+                    data-testid={`${testIdPrefix}-scope-${s}`}
+                  >
+                    {s === "local" ? "Local" : "Global"}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {scope === "local"
+                  ? "Only available in this script."
+                  : "Available across all scripts."}
+              </p>
             </div>
-          </div>
+          )}
 
           {/* Value */}
           <div className="space-y-1">

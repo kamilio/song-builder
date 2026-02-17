@@ -122,12 +122,6 @@ test.describe("US-056: Templates flows (global and local)", () => {
     // Fill in name
     await nameInput.fill("Maya");
 
-    // Select category 'Characters' (tab.id = 'character', displayed as "Characters")
-    // The form shows three category buttons; click the Characters one
-    const charactersBtn = page.getByTestId("global-template-category-character");
-    await expect(charactersBtn).toBeVisible();
-    await charactersBtn.click();
-
     // Fill in value
     const valueTextarea = page.getByTestId("global-template-value-input");
     await expect(valueTextarea).toBeVisible();
@@ -138,15 +132,8 @@ test.describe("US-056: Templates flows (global and local)", () => {
     await expect(saveTemplateBtn).toBeVisible();
     await saveTemplateBtn.click();
 
-    // ── Step 3: Assert Maya card appears in Characters tab ────────────────────
-    // The page should reload to Characters tab and show the Maya card
+    // ── Step 3: Assert Maya card appears in the global templates list ──────────
     const mayaCard = page.getByTestId("template-card-Maya");
-    await expect(mayaCard).toBeVisible();
-
-    // Verify we are on (or can switch to) the Characters tab and it shows Maya
-    const charactersTab = page.getByTestId("templates-tab-characters");
-    await expect(charactersTab).toBeVisible();
-    await charactersTab.click();
     await expect(mayaCard).toBeVisible();
 
     // ── Step 4: Assert video:template:global:create in action log ─────────────
@@ -161,9 +148,6 @@ test.describe("US-056: Templates flows (global and local)", () => {
       return { hasCreateEvent: createEvent !== undefined, data: createEvent?.data ?? null };
     });
     expect(logAfterGlobalCreate.hasCreateEvent).toBe(true);
-    expect(
-      (logAfterGlobalCreate.data as Record<string, unknown>)?.category
-    ).toBe("character");
 
     // ── Step 5: Seed a script; navigate to editor ─────────────────────────────
     await page.goto("/");
@@ -175,10 +159,8 @@ test.describe("US-056: Templates flows (global and local)", () => {
     const scriptPanel = page.getByTestId("script-panel");
     await expect(scriptPanel).toBeVisible();
 
-    // ── Step 6: Click Tmpl in mode toggle; assert panel heading ───────────────
-    const tmplModeToggle = page.getByTestId("mode-toggle-tmpl");
-    await expect(tmplModeToggle).toBeVisible();
-    await tmplModeToggle.click();
+    // ── Step 6: Navigate to templates view; assert panel heading ────────────────
+    await page.goto(`/video/scripts/${scriptId}/templates`);
 
     // Panel heading (data-testid="shot-mode-header") should read 'Script Templates'
     const panelHeader = page.getByTestId("shot-mode-header");
@@ -195,11 +177,6 @@ test.describe("US-056: Templates flows (global and local)", () => {
     const localNameInput = page.getByTestId("local-template-name-input");
     await expect(localNameInput).toBeVisible();
     await localNameInput.fill("style_cinematic");
-
-    // Select category 'Style' (tab.id = 'style')
-    const styleCategoryBtn = page.getByTestId("local-template-category-style");
-    await expect(styleCategoryBtn).toBeVisible();
-    await styleCategoryBtn.click();
 
     // Fill in value
     const localValueInput = page.getByTestId("local-template-value-input");
@@ -234,17 +211,13 @@ test.describe("US-056: Templates flows (global and local)", () => {
       scriptId
     );
     expect(logAfterLocalCreate.hasCreateEvent).toBe(true);
-    expect(
-      (logAfterLocalCreate.data as Record<string, unknown>)?.category
-    ).toBe("style");
 
-    // ── Step 10: Switch to Shot mode ─────────────────────────────────────────
-    const shotModeToggle = page.getByTestId("mode-toggle-shot");
-    await expect(shotModeToggle).toBeVisible();
-    await shotModeToggle.click();
+    // ── Step 10: Navigate to Shot mode ──────────────────────────────────────
+    await page.goto(`/video/scripts/${scriptId}/${shotId}`);
 
     // Panel header should now show 'Shot 1 of 1'
-    await expect(panelHeader).toContainText(/shot 1 of 1/i);
+    const panelHeader2 = page.getByTestId("shot-mode-header");
+    await expect(panelHeader2).toContainText(/shot 1 of 1/i);
 
     // ── Step 11: Click into the Tiptap prompt editor; type '{{' ───────────────
     // The Tiptap editor renders inside a div with class 'ProseMirror'
@@ -310,9 +283,7 @@ test.describe("US-056: Templates flows (global and local)", () => {
     expect(storageAfterInsert.prompt).not.toBeNull();
 
     // ── Step 16: Switch to Write mode; assert style_cinematic chip visible ────
-    const writeModeToggle = page.getByTestId("mode-toggle-write");
-    await expect(writeModeToggle).toBeVisible();
-    await writeModeToggle.click();
+    await page.goto(`/video/scripts/${scriptId}`);
 
     // The write mode content should be visible
     const writeModeContent = page.getByTestId("write-mode-content");

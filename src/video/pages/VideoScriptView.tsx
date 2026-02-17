@@ -126,13 +126,12 @@ import type {
   VideoHistoryEntry,
   LocalTemplate,
   GlobalTemplate,
-  TemplateCategory,
 } from "@/video/lib/storage/types";
 import { createLLMClient } from "@/shared/lib/llm/factory";
 import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 import { dump as yamlDump } from "js-yaml";
 import TemplateAutocomplete from "@/video/components/TemplateAutocomplete";
-import { TemplateDialog } from "@/video/components/TemplateDialog";
+import { TemplateDialog, type TemplateScope } from "@/video/components/TemplateDialog";
 import { CHAT_TOOLS } from "@/video/lib/chatTools";
 import { applyToolCall } from "@/video/lib/applyToolCall";
 import type { ToolCall } from "@/shared/lib/llm/types";
@@ -352,47 +351,6 @@ function tiptapContentToPrompt(content: { type: string; content?: object[] }): s
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-interface ModeToggleProps {
-  mode: EditorMode;
-  onChange: (mode: EditorMode) => void;
-}
-
-function ModeToggle({ mode, onChange }: ModeToggleProps) {
-  const modes: { key: EditorMode; label: string }[] = [
-    { key: "write", label: "Write" },
-    { key: "shot", label: "Shot" },
-    { key: "tmpl", label: "Tmpl" },
-  ];
-
-  return (
-    <div
-      className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5"
-      role="tablist"
-      aria-label="Editor mode"
-    >
-      {modes.map(({ key, label }) => (
-        <button
-          key={key}
-          type="button"
-          role="tab"
-          aria-selected={mode === key}
-          onClick={() => onChange(key)}
-          className={[
-            "px-2.5 py-1 text-xs font-medium rounded transition-colors",
-            mode === key
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          ].join(" ")}
-          data-testid={`mode-toggle-${key}`}
-        >
-          {label}
-          {mode === key ? "●" : "○"}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
@@ -1664,25 +1622,15 @@ interface LocalTemplateCardProps {
 }
 
 function LocalTemplateCard({ template, onEdit, onDelete }: LocalTemplateCardProps) {
-  const categoryLabel =
-    template.category === "character"
-      ? "Characters"
-      : template.category === "style"
-      ? "Style"
-      : "Scenery";
-
   return (
     <div
       className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 hover:shadow-sm hover:border-foreground/20 transition-all"
       data-testid={`local-template-card-${template.name}`}
     >
-      {/* Variable name chip + category */}
+      {/* Variable name chip */}
       <div className="flex items-start justify-between gap-2">
         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-primary/10 text-primary border border-primary/20">
           {`{{${template.name}}}`}
-        </span>
-        <span className="text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-          {categoryLabel}
         </span>
       </div>
 
@@ -1732,11 +1680,10 @@ interface TemplatesModeViewProps {
  * script. Saving writes with global: false.
  */
 function TemplatesModeView({ script, onUpdate }: TemplatesModeViewProps) {
-  // Form state: null = closed, { mode, initial, initialCategory }
+  // Form state: null = closed, { mode, initial }
   const [formState, setFormState] = useState<{
     mode: "create" | "edit";
     initial?: LocalTemplate;
-    initialCategory?: TemplateCategory;
   } | null>(null);
 
   // Pending delete name
@@ -1755,32 +1702,40 @@ function TemplatesModeView({ script, onUpdate }: TemplatesModeViewProps) {
     setFormState({ mode: "edit", initial: template });
   }
 
-  function handleFormSave(data: { name: string; category: TemplateCategory; value: string }) {
+  function handleFormSave(data: { name: string; value: string; scope: TemplateScope }) {
     const isEdit = formState?.mode === "edit";
-    const newTemplate: LocalTemplate = {
-      name: data.name,
-      category: data.category,
-      value: data.value,
-      global: false,
-    };
 
-    const updatedTemplates: Record<string, LocalTemplate> = {
-      ...script.templates,
-      [data.name]: newTemplate,
-    };
-
-    const updated = videoStorageService.updateScript(script.id, {
-      templates: updatedTemplates,
-    });
-    if (updated) {
-      onUpdate(updated);
+    if (data.scope === "global") {
+      // Move to global storage
+      videoStorageService.createGlobalTemplate({ name: data.name, value: data.value });
+      // Remove from local templates if it existed there
+      const updatedTemplates = { ...script.templates };
+      delete updatedTemplates[data.name];
+      const updated = videoStorageService.updateScript(script.id, {
+        templates: updatedTemplates,
+      });
+      if (updated) onUpdate(updated);
+    } else {
+      // Save as local template
+      const newTemplate: LocalTemplate = {
+        name: data.name,
+        value: data.value,
+        global: false,
+      };
+      const updatedTemplates: Record<string, LocalTemplate> = {
+        ...script.templates,
+        [data.name]: newTemplate,
+      };
+      const updated = videoStorageService.updateScript(script.id, {
+        templates: updatedTemplates,
+      });
+      if (updated) onUpdate(updated);
     }
+
     log({
       category: "user:action",
       action: isEdit ? "video:template:local:edit" : "video:template:local:create",
-      data: isEdit
-        ? { scriptId: script.id, name: data.name }
-        : { scriptId: script.id, name: data.name, category: data.category },
+      data: { scriptId: script.id, name: data.name, scope: data.scope },
     });
     setFormState(null);
   }
@@ -1884,7 +1839,7 @@ function TemplatesModeView({ script, onUpdate }: TemplatesModeViewProps) {
       {formState !== null && (
         <TemplateDialog
           initial={formState.initial}
-          initialCategory={formState.initialCategory}
+          initialScope="local"
           testIdPrefix="local-template"
           onSave={handleFormSave}
           onCancel={handleFormCancel}
@@ -3499,39 +3454,6 @@ function VideoScriptViewInner() {
     [script, activeShotIndex, isShotRoute, navigate]
   );
 
-  // ─── Mode change ──────────────────────────────────────────────────────────
-  const handleModeChange = useCallback(
-    (newMode: EditorMode) => {
-      if (!script) return;
-      if (isMounted.current) {
-        if (newMode !== mode) {
-          log({
-            category: "user:action",
-            action: "video:mode:change",
-            data: { scriptId: script.id, from: mode, to: newMode },
-          });
-        }
-        if (newMode === "shot") {
-          // Navigate to shot URL instead of toggling state
-          const clampedIndex = Math.min(
-            activeShotIndex,
-            Math.max(0, script.shots.length - 1)
-          );
-          const shot = script.shots[clampedIndex];
-          if (shot) {
-            navigate(`/video/scripts/${script.id}/${shot.id}`);
-          }
-        } else if (newMode === "tmpl") {
-          navigate(`/video/scripts/${script.id}/templates`);
-        } else {
-          // write mode — navigate back to script index
-          navigate(`/video/scripts/${script.id}`);
-        }
-      }
-    },
-    [script, mode, activeShotIndex, navigate]
-  );
-
   // ─── Drag-and-drop sensors (US-043) ──────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -3631,7 +3553,7 @@ function VideoScriptViewInner() {
       templates: Object.fromEntries(
         Object.entries(script.templates).map(([name, tmpl]) => [
           name,
-          { category: tmpl.category, value: tmpl.value, global: false },
+          { value: tmpl.value, global: false },
         ])
       ),
       shots: script.shots.map((shot) => ({
@@ -3904,7 +3826,6 @@ function VideoScriptViewInner() {
               {headerLabel}
             </span>
             <div className="flex items-center gap-2">
-              <ModeToggle mode={mode} onChange={handleModeChange} />
               <button
                 type="button"
                 onClick={handleAddShot}

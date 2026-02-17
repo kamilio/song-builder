@@ -57,13 +57,12 @@ test.describe("Video feature smoke test (US-051)", () => {
     await expect(page.getByTestId("new-script-card")).toBeVisible();
   });
 
-  // ── 4. /video/templates — Characters tab and New Variable button ──────────
-  test("/video/templates shows Characters tab and New Variable button", async ({
+  // ── 4. /video/templates — New Variable button ────────────────────────────
+  test("/video/templates shows New Variable button", async ({
     page,
   }) => {
     await page.goto("/video/templates");
 
-    await expect(page.getByTestId("templates-tab-characters")).toBeVisible();
     await expect(page.getByTestId("new-variable-btn")).toBeVisible();
   });
 

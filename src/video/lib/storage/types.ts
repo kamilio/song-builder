@@ -16,8 +16,6 @@
 
 export type AudioSource = "video" | "elevenlabs";
 
-export type TemplateCategory = "character" | "style" | "scenery";
-
 // ─── VideoHistoryEntry ────────────────────────────────────────────────────────
 
 /**
@@ -89,7 +87,6 @@ export interface ScriptSettings {
  */
 export interface LocalTemplate {
   name: string;
-  category: TemplateCategory;
   value: string;
   global: false;
 }
@@ -113,7 +110,6 @@ export interface Script {
  */
 export interface GlobalTemplate {
   name: string;
-  category: TemplateCategory;
   value: string;
   global: true;
 }

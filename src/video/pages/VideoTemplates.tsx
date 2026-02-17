@@ -4,13 +4,9 @@
  * Route: /video/templates (TopBar)
  *
  * Manages global template variables available across all scripts.
- * Templates are organized by category (Characters, Style, Scenery) with a
- * tab bar. Each template card shows the variable name as '{{name}}', the
- * value text, Edit / Delete buttons, and "Used in" cross-script metadata.
- *
- * A '+ New Variable' button (top-right) opens a form without a pre-selected
- * category. Each category tab also has a contextual add button that opens the
- * same form with that tab's category pre-selected.
+ * Shows all templates in a flat list. Each template card shows the variable
+ * name as '{{name}}', the value text, Edit / Delete buttons, and "Used in"
+ * cross-script metadata.
  *
  * The "Used in" metadata is computed on every render of this page by scanning
  * all script shot prompts via computeTemplateUsage().
@@ -23,21 +19,10 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { videoStorageService } from "@/video/lib/storage/storageService";
-import type { GlobalTemplate, Script, TemplateCategory } from "@/video/lib/storage/types";
+import type { GlobalTemplate, Script } from "@/video/lib/storage/types";
 import { log } from "@/music/lib/actionLog";
 import { computeTemplateUsage, formatTemplateUsage } from "@/video/lib/templateUsage";
 import { TemplateDialog } from "@/video/components/TemplateDialog";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-type Tab = "character" | "style" | "scenery";
-
-const TABS: { id: Tab; label: string; addLabel: string; testId: string }[] = [
-  { id: "character", label: "Characters", addLabel: "+ Add Character", testId: "templates-tab-characters" },
-  { id: "style",     label: "Style",      addLabel: "+ Add Style",     testId: "templates-tab-style"      },
-  { id: "scenery",   label: "Scenery",    addLabel: "+ Add Scenery",   testId: "templates-tab-scenery"    },
-];
-
 
 // ─── TemplateCard ─────────────────────────────────────────────────────────────
 
@@ -121,7 +106,6 @@ function TemplateCard({ template, usageLines, onEdit, onDelete }: TemplateCardPr
 // ─── VideoTemplates ───────────────────────────────────────────────────────────
 
 export default function VideoTemplates() {
-  const [activeTab, setActiveTab] = useState<Tab>("character");
   const [templates, setTemplates] = useState<GlobalTemplate[]>(() =>
     videoStorageService.listGlobalTemplates()
   );
@@ -130,11 +114,10 @@ export default function VideoTemplates() {
     videoStorageService.listScripts()
   );
 
-  // Form state: null = closed, { mode, initial, initialCategory }
+  // Form state: null = closed, { mode, initial }
   const [formState, setFormState] = useState<{
     mode: "create" | "edit";
     initial?: GlobalTemplate;
-    initialCategory?: TemplateCategory;
   } | null>(null);
 
   // Pending delete name — when set, ConfirmDialog is shown
@@ -148,19 +131,17 @@ export default function VideoTemplates() {
 
   // ── Form handlers ────────────────────────────────────────────────────────
 
-  function openCreateForm(initialCategory?: TemplateCategory) {
-    setFormState({ mode: "create", initialCategory });
+  function openCreateForm() {
+    setFormState({ mode: "create" });
   }
 
   function openEditForm(template: GlobalTemplate) {
     setFormState({ mode: "edit", initial: template });
   }
 
-  function handleFormSave(data: { name: string; category: TemplateCategory; value: string }) {
+  function handleFormSave(data: { name: string; value: string }) {
     if (formState?.mode === "edit" && formState.initial) {
-      // Update existing — name is the key, only category and value can change
       videoStorageService.updateGlobalTemplate(formState.initial.name, {
-        category: data.category,
         value: data.value,
       });
       log({
@@ -171,13 +152,12 @@ export default function VideoTemplates() {
     } else {
       videoStorageService.createGlobalTemplate({
         name: data.name,
-        category: data.category,
         value: data.value,
       });
       log({
         category: "user:action",
         action: "video:template:global:create",
-        data: { name: data.name, category: data.category },
+        data: { name: data.name },
       });
     }
     reloadTemplates();
@@ -211,11 +191,6 @@ export default function VideoTemplates() {
     setPendingDeleteName(null);
   }
 
-  // ── Filtered templates for active tab ───────────────────────────────────
-
-  const filteredTemplates = templates.filter((t) => t.category === activeTab);
-  const activeTabInfo = TABS.find((t) => t.id === activeTab)!;
-
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {/* Page header */}
@@ -227,7 +202,7 @@ export default function VideoTemplates() {
           </p>
         </div>
         <Button
-          onClick={() => openCreateForm(undefined)}
+          onClick={openCreateForm}
           data-testid="new-variable-btn"
           size="sm"
         >
@@ -236,99 +211,43 @@ export default function VideoTemplates() {
         </Button>
       </div>
 
-      {/* Category tabs */}
-      <div
-        className="flex gap-1 border-b border-border mb-6"
-        role="tablist"
-        aria-label="Template categories"
-      >
-        {TABS.map((tab) => {
-          const count = templates.filter((t) => t.category === tab.id).length;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`tab-panel-${tab.id}`}
-              id={`tab-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                activeTab === tab.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`}
-              data-testid={tab.testId}
-            >
-              {tab.label}
-              {count > 0 && (
-                <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-                  ({count})
-                </span>
+      {/* Template list */}
+      {templates.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            No global templates yet.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openCreateForm}
+          >
+            <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
+            Add Variable
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {templates.map((template) => (
+            <TemplateCard
+              key={template.name}
+              template={template}
+              usageLines={formatTemplateUsage(
+                computeTemplateUsage(template.name, scripts)
               )}
-            </button>
-          );
-        })}
-      </div>
+              onEdit={openEditForm}
+              onDelete={handleDeleteRequest}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Tab panel */}
-      <div
-        id={`tab-panel-${activeTab}`}
-        role="tabpanel"
-        aria-labelledby={`tab-${activeTab}`}
-      >
-        {filteredTemplates.length === 0 ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              No {activeTabInfo.label.toLowerCase()} templates yet.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openCreateForm(activeTab as TemplateCategory)}
-            >
-              <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
-              {activeTabInfo.addLabel}
-            </Button>
-          </div>
-        ) : (
-          <>
-            {/* Contextual add button */}
-            <div className="flex justify-end mb-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openCreateForm(activeTab as TemplateCategory)}
-              >
-                <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
-                {activeTabInfo.addLabel}
-              </Button>
-            </div>
-
-            {/* Template cards grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredTemplates.map((template) => (
-                <TemplateCard
-                  key={template.name}
-                  template={template}
-                  usageLines={formatTemplateUsage(
-                    computeTemplateUsage(template.name, scripts)
-                  )}
-                  onEdit={openEditForm}
-                  onDelete={handleDeleteRequest}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Add/Edit form modal */}
+      {/* Add/Edit form modal — no scope toggle on global page */}
       {formState !== null && (
         <TemplateDialog
           initial={formState.initial}
-          initialCategory={formState.initialCategory}
+          initialScope="global"
+          showScopeToggle={false}
           testIdPrefix="global-template"
           onSave={handleFormSave}
           onCancel={handleFormCancel}
