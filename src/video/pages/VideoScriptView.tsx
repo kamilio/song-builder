@@ -107,6 +107,7 @@ import {
   Sparkles,
   Pin,
   Clock,
+  Info,
 } from "lucide-react";
 import { ErrorBoundary } from "@/shared/components/ErrorBoundary";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
@@ -1287,6 +1288,11 @@ function ShotCard({
               <span className="text-xs font-medium text-muted-foreground">
                 Narration
               </span>
+              <Info
+                className="h-3 w-3 text-muted-foreground cursor-help"
+                data-testid="narration-info-icon"
+                title="Narration audio will replace the video's native audio track."
+              />
             </div>
 
             {shot.narration.enabled && (
@@ -2616,6 +2622,11 @@ function ShotModeView({
           <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
             Narration
           </span>
+          <Info
+            className="h-3 w-3 text-muted-foreground cursor-help"
+            data-testid="narration-info-icon"
+            title="Narration audio will replace the video's native audio track."
+          />
           <button
             type="button"
             role="switch"
