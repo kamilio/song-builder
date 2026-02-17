@@ -5,6 +5,7 @@
  *
  * US-041: Script editor shell — layout, mode toggle, chat panel.
  * US-042: Script editor — Write mode shot cards.
+ * US-043: Drag-and-drop shot reordering in Write mode.
  *
  * Layout:
  *   - Desktop: split-pane (left script panel, right chat panel)
@@ -19,6 +20,13 @@
  *   - Full shot card per shot: drag handle, header, prompt textarea, template chips,
  *     narration section, selected video pill, → Shot view link
  *   - All interactive elements carry data-testid attributes
+ *
+ * Drag-and-drop reordering (US-043):
+ *   - DndContext + SortableContext wrap the shots list in Write mode.
+ *   - Each ShotCard uses useSortable; drag handle activates via the GripVertical icon.
+ *   - onDragEnd reorders the shots array and persists to storage.
+ *   - Shot number labels are index-based; they update immediately after drop.
+ *   - Keyboard drag: Space to pick up, arrow keys to move, Space/Enter to drop.
  *
  * Safety:
  *   - Redirects to /video/scripts when script ID is not found.
@@ -36,6 +44,23 @@ import {
   KeyboardEvent,
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Plus,
   MessageSquare,
@@ -201,6 +226,15 @@ function ShotCard({
   onDelete,
   onSwitchToShotMode,
 }: ShotCardProps) {
+  // ── Sortable DnD ────────────────────────────────────────────────────────────
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: shot.id });
   // ── Rename state ────────────────────────────────────────────────────────────
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(shot.title);
@@ -397,19 +431,29 @@ function ShotCard({
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
   return (
     <>
       <div
+        ref={setNodeRef}
+        style={sortableStyle}
         className="rounded-lg border border-border bg-card"
         data-testid={`shot-card-${shot.id}`}
       >
         {/* ── Card header ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
-          {/* Drag handle (visual only — DnD wired in US-043) */}
+          {/* Drag handle — activates DnD (pointer + keyboard) */}
           <span
-            className="text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
-            aria-hidden="true"
+            className="text-muted-foreground cursor-grab active:cursor-grabbing shrink-0 touch-none"
             data-testid={`shot-drag-handle-${shot.id}`}
+            aria-label={`Drag handle for shot ${index + 1}`}
+            {...attributes}
+            {...listeners}
           >
             <GripVertical className="h-4 w-4" />
           </span>
@@ -822,6 +866,35 @@ function VideoScriptViewInner() {
     }
   }, []);
 
+  // ─── Drag-and-drop sensors (US-043) ──────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // ─── Handle drag end: reorder shots array and persist ─────────────────────
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id || !script) return;
+
+      const oldIndex = script.shots.findIndex((s) => s.id === active.id);
+      const newIndex = script.shots.findIndex((s) => s.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reorderedShots = arrayMove(script.shots, oldIndex, newIndex);
+      const updated = videoStorageService.updateScript(script.id, {
+        shots: reorderedShots,
+      });
+      if (updated && isMounted.current) {
+        setScript(updated);
+      }
+    },
+    [script]
+  );
+
   // ─── Subtitles toggle ─────────────────────────────────────────────────────
   const handleSubtitlesToggle = useCallback(() => {
     if (!script) return;
@@ -1063,17 +1136,28 @@ function VideoScriptViewInner() {
                     </p>
                   </div>
                 ) : (
-                  script.shots.map((shot, idx) => (
-                    <ShotCard
-                      key={shot.id}
-                      shot={shot}
-                      index={idx}
-                      script={script}
-                      onUpdate={handleShotUpdate}
-                      onDelete={handleDeleteShot}
-                      onSwitchToShotMode={handleSwitchToShotMode}
-                    />
-                  ))
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={script.shots.map((s) => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {script.shots.map((shot, idx) => (
+                        <ShotCard
+                          key={shot.id}
+                          shot={shot}
+                          index={idx}
+                          script={script}
+                          onUpdate={handleShotUpdate}
+                          onDelete={handleDeleteShot}
+                          onSwitchToShotMode={handleSwitchToShotMode}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
                 {/* Sentinel element for scroll-to-new-shot */}
                 <div ref={shotListEndRef} />
