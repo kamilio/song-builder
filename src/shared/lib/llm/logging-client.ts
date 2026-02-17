@@ -80,4 +80,52 @@ export class LoggingLLMClient implements LLMClient {
       throw err;
     }
   }
+
+  async generateVideo(prompt: string): Promise<string> {
+    log({
+      category: "llm:request",
+      action: "llm:video:start",
+      data: { prompt },
+    });
+    try {
+      const result = await this.inner.generateVideo(prompt);
+      log({
+        category: "llm:response",
+        action: "llm:video:complete",
+        data: { prompt, result },
+      });
+      return result;
+    } catch (err) {
+      log({
+        category: "llm:response",
+        action: "llm:video:error",
+        data: { error: err instanceof Error ? err.message : String(err) },
+      });
+      throw err;
+    }
+  }
+
+  async generateAudio(text: string): Promise<string> {
+    log({
+      category: "llm:request",
+      action: "llm:audio:start",
+      data: { text },
+    });
+    try {
+      const result = await this.inner.generateAudio(text);
+      log({
+        category: "llm:response",
+        action: "llm:audio:complete",
+        data: { text, result },
+      });
+      return result;
+    } catch (err) {
+      log({
+        category: "llm:response",
+        action: "llm:audio:error",
+        data: { error: err instanceof Error ? err.message : String(err) },
+      });
+      throw err;
+    }
+  }
 }

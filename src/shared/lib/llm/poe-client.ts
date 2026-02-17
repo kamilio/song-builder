@@ -80,4 +80,28 @@ export class PoeLLMClient implements LLMClient {
 
     return Promise.all(Array.from({ length: count }, makeRequest));
   }
+
+  async generateVideo(prompt: string): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: "veo-3.1",
+      messages: [{ role: "user", content: prompt }],
+      // @ts-expect-error extra_body is a Poe-specific extension not in the OpenAI types
+      extra_body: { size: "1792x1024", duration: "8" },
+    });
+
+    const videoUrl = response.choices[0]?.message?.content;
+    if (!videoUrl) throw new Error("veo-3.1 returned an empty response");
+    return videoUrl;
+  }
+
+  async generateAudio(text: string): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: "elevenlabs-v3",
+      messages: [{ role: "user", content: text }],
+    });
+
+    const audioUrl = response.choices[0]?.message?.content;
+    if (!audioUrl) throw new Error("elevenlabs-v3 returned an empty response");
+    return audioUrl;
+  }
 }

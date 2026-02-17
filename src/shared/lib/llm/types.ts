@@ -30,4 +30,16 @@ export interface LLMClient {
    * @param remixImageBase64 - optional raw base64-encoded reference image for remix (no data URI prefix)
    */
   generateImage(prompt: string, count?: number, model?: string, extraBody?: Record<string, unknown>, remixImageBase64?: string): Promise<string[]>;
+
+  /**
+   * Submit a video prompt to the veo-3.1 model and return a publicly-accessible video URL.
+   * @param prompt - text description of the desired video shot
+   */
+  generateVideo(prompt: string): Promise<string>;
+
+  /**
+   * Submit narration text to the elevenlabs-v3 model and return a publicly-accessible audio URL.
+   * @param text - narration text to synthesize
+   */
+  generateAudio(text: string): Promise<string>;
 }

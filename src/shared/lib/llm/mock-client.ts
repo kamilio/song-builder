@@ -4,6 +4,9 @@ import lyricsFixture1 from "./fixtures/lyrics-response.txt?raw";
 import lyricsFixture2 from "./fixtures/lyrics-response-2.txt?raw";
 import songFixtureRaw from "./fixtures/song-response.json?raw";
 import imageUrlsRaw from "./fixtures/image-urls.json?raw";
+import videoScriptFixture from "./fixtures/video-script-response.txt?raw";
+import videoUrlFixture from "./fixtures/video-url.txt?raw";
+import audioUrlFixture from "./fixtures/audio-url.txt?raw";
 
 const lyricsFixtures = [lyricsFixture1, lyricsFixture2];
 const imageUrlFixtures: string[] = JSON.parse(imageUrlsRaw) as string[];
@@ -46,8 +49,16 @@ export class MockLLMClient implements LLMClient {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async chat(_messages: ChatMessage[], _model?: string): Promise<string> {
+  async chat(messages: ChatMessage[], _model?: string): Promise<string> {
     await this.delay();
+    // Return video script YAML when the last user message contains video-related keywords.
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUserMessage) {
+      const content = lastUserMessage.content.toLowerCase();
+      if (content.includes("video") || content.includes("script") || content.includes("shot")) {
+        return videoScriptFixture;
+      }
+    }
     return lyricsFixtures[this.chatCallCount++ % lyricsFixtures.length];
   }
 
@@ -71,5 +82,17 @@ export class MockLLMClient implements LLMClient {
       urls.push(imageUrlFixtures[this.imageCallCount++ % imageUrlFixtures.length]);
     }
     return urls;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async generateVideo(_prompt: string): Promise<string> {
+    await this.delay();
+    return videoUrlFixture.trim();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async generateAudio(_text: string): Promise<string> {
+    await this.delay();
+    return audioUrlFixture.trim();
   }
 }

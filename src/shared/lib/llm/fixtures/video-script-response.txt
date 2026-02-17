@@ -1,0 +1,29 @@
+title: Sample Video Script
+settings:
+  subtitles: true
+  default_audio: video
+shots:
+  - title: Opening Shot
+    prompt: Wide establishing shot of a misty mountain range at sunrise, golden light filtering through clouds, cinematic, 4K
+    narration:
+      enabled: false
+      text: ''
+    video:
+      selected_url: null
+      history: []
+  - title: Character Introduction
+    prompt: Close-up of a lone explorer in hiking gear standing at a cliff edge, backlit by the rising sun, wind in hair, dramatic
+    narration:
+      enabled: true
+      text: In the heart of the wilderness, one journey begins at dawn.
+    video:
+      selected_url: null
+      history: []
+  - title: Journey Begins
+    prompt: Tracking shot following the explorer walking through a dense forest path, dappled light, peaceful and adventurous atmosphere
+    narration:
+      enabled: false
+      text: ''
+    video:
+      selected_url: null
+      history: []
