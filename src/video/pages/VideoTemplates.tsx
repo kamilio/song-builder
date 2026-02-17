@@ -18,14 +18,15 @@
  * Implements US-040 (core template management) and US-060 ('Used in' metadata).
  */
 
-import { useState, useRef, useEffect, type FormEvent } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { videoStorageService } from "@/video/lib/storage/storageService";
 import type { GlobalTemplate, Script, TemplateCategory } from "@/video/lib/storage/types";
 import { log } from "@/music/lib/actionLog";
 import { computeTemplateUsage, formatTemplateUsage } from "@/video/lib/templateUsage";
+import { TemplateDialog } from "@/video/components/TemplateDialog";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,173 +38,6 @@ const TABS: { id: Tab; label: string; addLabel: string; testId: string }[] = [
   { id: "scenery",   label: "Scenery",    addLabel: "+ Add Scenery",   testId: "templates-tab-scenery"    },
 ];
 
-// ─── TemplateForm ─────────────────────────────────────────────────────────────
-
-interface TemplateFormProps {
-  /** If provided, the form is in edit mode and pre-fills with these values. */
-  initial?: GlobalTemplate;
-  /** Pre-selected category (can be undefined when opened via '+ New Variable'). */
-  initialCategory?: TemplateCategory;
-  /** Called when the user saves the form. */
-  onSave: (data: { name: string; category: TemplateCategory; value: string }) => void;
-  /** Called when the user cancels. */
-  onCancel: () => void;
-}
-
-function TemplateForm({ initial, initialCategory, onSave, onCancel }: TemplateFormProps) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [category, setCategory] = useState<TemplateCategory>(
-    initial?.category ?? initialCategory ?? "character"
-  );
-  const [value, setValue] = useState(initial?.value ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    nameInputRef.current?.focus();
-  }, []);
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const trimmedName = name.trim();
-    const trimmedValue = value.trim();
-
-    if (!trimmedName) {
-      setError("Variable name is required.");
-      nameInputRef.current?.focus();
-      return;
-    }
-    // Variable names should be valid identifiers (letters, digits, underscores).
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedName)) {
-      setError("Name must start with a letter or underscore and contain only letters, digits, or underscores.");
-      nameInputRef.current?.focus();
-      return;
-    }
-    if (!trimmedValue) {
-      setError("Value is required.");
-      return;
-    }
-
-    setError(null);
-    onSave({ name: trimmedName, category, value: trimmedValue });
-  }
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={initial ? "Edit template variable" : "New template variable"}
-      className="fixed inset-0 z-50 flex items-center justify-center"
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        aria-hidden="true"
-        onClick={onCancel}
-      />
-
-      {/* Modal panel */}
-      <div className="relative z-10 bg-background border rounded-lg shadow-lg p-6 w-full max-w-md mx-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">
-            {initial ? "Edit Variable" : "New Variable"}
-          </h2>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            aria-label="Cancel"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          {/* Name */}
-          <div className="space-y-1">
-            <label htmlFor="template-name" className="text-sm font-medium">
-              Variable name
-            </label>
-            <input
-              id="template-name"
-              ref={nameInputRef}
-              type="text"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setError(null);
-              }}
-              placeholder="e.g. maya_character"
-              className="w-full text-sm bg-background border border-border rounded px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary"
-              aria-required="true"
-              aria-describedby={error ? "template-form-error" : undefined}
-              // Prevent editing the name when in edit mode (name is the key)
-              readOnly={!!initial}
-              aria-readonly={!!initial}
-            />
-          </div>
-
-          {/* Category */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Category</label>
-            <div className="flex gap-2">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setCategory(tab.id as TemplateCategory)}
-                  className={`flex-1 py-1.5 text-sm rounded border transition-colors ${
-                    category === tab.id
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "border-border text-muted-foreground hover:bg-accent"
-                  }`}
-                  aria-pressed={category === tab.id}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Value */}
-          <div className="space-y-1">
-            <label htmlFor="template-value" className="text-sm font-medium">
-              Value
-            </label>
-            <textarea
-              id="template-value"
-              value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
-                setError(null);
-              }}
-              placeholder="Describe this template variable in detail…"
-              rows={4}
-              className="w-full text-sm bg-background border border-border rounded px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary resize-none"
-              aria-required="true"
-              aria-describedby={error ? "template-form-error" : undefined}
-            />
-          </div>
-
-          {error && (
-            <p id="template-form-error" className="text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-
-          <div className="flex gap-3 justify-end pt-1">
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button type="submit">
-              {initial ? "Save Changes" : "Add Variable"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 // ─── TemplateCard ─────────────────────────────────────────────────────────────
 
@@ -492,9 +326,10 @@ export default function VideoTemplates() {
 
       {/* Add/Edit form modal */}
       {formState !== null && (
-        <TemplateForm
+        <TemplateDialog
           initial={formState.initial}
           initialCategory={formState.initialCategory}
+          testIdPrefix="global-template"
           onSave={handleFormSave}
           onCancel={handleFormCancel}
         />

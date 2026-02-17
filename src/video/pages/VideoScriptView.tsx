@@ -129,6 +129,7 @@ import { createLLMClient } from "@/shared/lib/llm/factory";
 import { usePoeBalanceContext } from "@/shared/context/PoeBalanceContext";
 import { dump as yamlDump } from "js-yaml";
 import TemplateAutocomplete from "@/video/components/TemplateAutocomplete";
+import { TemplateDialog } from "@/video/components/TemplateDialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1478,162 +1479,6 @@ function ShotCard({
 
 // ─── TemplatesModeView ────────────────────────────────────────────────────────
 
-const TEMPLATE_CATEGORY_TABS: { id: TemplateCategory; label: string; addLabel: string }[] = [
-  { id: "character", label: "Characters", addLabel: "+ Add Character" },
-  { id: "style",     label: "Style",      addLabel: "+ Add Style"     },
-  { id: "scenery",   label: "Scenery",    addLabel: "+ Add Scenery"   },
-];
-
-interface LocalTemplateFormProps {
-  /** If provided, the form is in edit mode. */
-  initial?: LocalTemplate;
-  /** Pre-selected category (can be undefined). */
-  initialCategory?: TemplateCategory;
-  onSave: (data: { name: string; category: TemplateCategory; value: string }) => void;
-  onCancel: () => void;
-}
-
-function LocalTemplateForm({ initial, initialCategory, onSave, onCancel }: LocalTemplateFormProps) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [category, setCategory] = useState<TemplateCategory>(
-    initial?.category ?? initialCategory ?? "character"
-  );
-  const [value, setValue] = useState(initial?.value ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    nameInputRef.current?.focus();
-  }, []);
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const trimmedName = name.trim();
-    const trimmedValue = value.trim();
-
-    if (!trimmedName) {
-      setError("Variable name is required.");
-      nameInputRef.current?.focus();
-      return;
-    }
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedName)) {
-      setError("Name must start with a letter or underscore and contain only letters, digits, or underscores.");
-      nameInputRef.current?.focus();
-      return;
-    }
-    if (!trimmedValue) {
-      setError("Value is required.");
-      return;
-    }
-
-    setError(null);
-    onSave({ name: trimmedName, category, value: trimmedValue });
-  }
-
-  return (
-    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold">
-          {initial ? "Edit Variable" : "New Variable"}
-        </span>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          aria-label="Cancel"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-3" noValidate>
-        {/* Name */}
-        <div className="space-y-1">
-          <label htmlFor="local-template-name" className="text-xs font-medium">
-            Variable name
-          </label>
-          <input
-            id="local-template-name"
-            ref={nameInputRef}
-            type="text"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setError(null);
-            }}
-            placeholder="e.g. maya_character"
-            className="w-full text-sm bg-background border border-border rounded px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary"
-            aria-required="true"
-            aria-describedby={error ? "local-template-form-error" : undefined}
-            readOnly={!!initial}
-            aria-readonly={!!initial}
-            data-testid="local-template-name-input"
-          />
-        </div>
-
-        {/* Category */}
-        <div className="space-y-1">
-          <label className="text-xs font-medium">Category</label>
-          <div className="flex gap-2">
-            {TEMPLATE_CATEGORY_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setCategory(tab.id)}
-                className={`flex-1 py-1 text-xs rounded border transition-colors ${
-                  category === tab.id
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border text-muted-foreground hover:bg-accent"
-                }`}
-                aria-pressed={category === tab.id}
-                data-testid={`local-template-category-${tab.id}`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Value */}
-        <div className="space-y-1">
-          <label htmlFor="local-template-value" className="text-xs font-medium">
-            Value
-          </label>
-          <textarea
-            id="local-template-value"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              setError(null);
-            }}
-            placeholder="Describe this template variable in detail…"
-            rows={3}
-            className="w-full text-sm bg-background border border-border rounded px-3 py-1.5 outline-none focus:ring-1 focus:ring-primary resize-none"
-            aria-required="true"
-            aria-describedby={error ? "local-template-form-error" : undefined}
-            data-testid="local-template-value-input"
-          />
-        </div>
-
-        {error && (
-          <p id="local-template-form-error" className="text-xs text-destructive" role="alert">
-            {error}
-          </p>
-        )}
-
-        <div className="flex gap-2 justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="submit" size="sm" data-testid="local-template-save-btn">
-            {initial ? "Save Changes" : "Add Variable"}
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 interface LocalTemplateCardProps {
   template: LocalTemplate;
   onEdit: (template: LocalTemplate) => void;
@@ -1818,18 +1663,8 @@ function TemplatesModeView({ script, onUpdate }: TemplatesModeViewProps) {
         </Button>
       </div>
 
-      {/* Inline form (shown above the list when creating) */}
-      {formState !== null && (
-        <LocalTemplateForm
-          initial={formState.initial}
-          initialCategory={formState.initialCategory}
-          onSave={handleFormSave}
-          onCancel={handleFormCancel}
-        />
-      )}
-
       {/* Template list */}
-      {localTemplates.length === 0 && formState === null ? (
+      {localTemplates.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
           <p className="text-sm text-muted-foreground">
             No local template variables yet.
@@ -1864,6 +1699,17 @@ function TemplatesModeView({ script, onUpdate }: TemplatesModeViewProps) {
           description={`Delete "{{${pendingDeleteName}}}"? Shot prompts that reference this variable will keep the {{${pendingDeleteName}}} placeholder, but it will no longer appear as a chip.`}
           onConfirm={confirmDelete}
           onCancel={cancelDelete}
+        />
+      )}
+
+      {/* Template create/edit modal dialog */}
+      {formState !== null && (
+        <TemplateDialog
+          initial={formState.initial}
+          initialCategory={formState.initialCategory}
+          testIdPrefix="local-template"
+          onSave={handleFormSave}
+          onCancel={handleFormCancel}
         />
       )}
     </div>

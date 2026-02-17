@@ -116,7 +116,7 @@ test.describe("US-056: Templates flows (global and local)", () => {
     await newVariableBtn.click();
 
     // The modal form should open
-    const nameInput = page.locator("#template-name");
+    const nameInput = page.getByTestId("global-template-name-input");
     await expect(nameInput).toBeVisible();
 
     // Fill in name
@@ -124,19 +124,19 @@ test.describe("US-056: Templates flows (global and local)", () => {
 
     // Select category 'Characters' (tab.id = 'character', displayed as "Characters")
     // The form shows three category buttons; click the Characters one
-    const charactersBtn = page.getByRole("button", { name: "Characters" });
+    const charactersBtn = page.getByTestId("global-template-category-character");
     await expect(charactersBtn).toBeVisible();
     await charactersBtn.click();
 
     // Fill in value
-    const valueTextarea = page.locator("#template-value");
+    const valueTextarea = page.getByTestId("global-template-value-input");
     await expect(valueTextarea).toBeVisible();
     await valueTextarea.fill("a young woman with curly hair");
 
-    // Submit the form by clicking "Add Variable"
-    const addVariableBtn = page.getByRole("button", { name: "Add Variable" });
-    await expect(addVariableBtn).toBeVisible();
-    await addVariableBtn.click();
+    // Submit the form by clicking "Save Template"
+    const saveTemplateBtn = page.getByTestId("global-template-save-btn");
+    await expect(saveTemplateBtn).toBeVisible();
+    await saveTemplateBtn.click();
 
     // ── Step 3: Assert Maya card appears in Characters tab ────────────────────
     // The page should reload to Characters tab and show the Maya card
