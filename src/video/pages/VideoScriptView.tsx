@@ -145,6 +145,15 @@ type GenerationSlotState =
   | { status: "pending"; slotId: string }
   | { status: "error"; slotId: string; errorMessage: string; prompt: string };
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Default video clip duration in seconds (matches the veo-3.1 generation
+ * setting duration: '8'). Used as the reference duration when validating
+ * generated narration audio length.
+ */
+const VIDEO_DURATION = 8;
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function generateId(): string {
@@ -191,6 +200,24 @@ function formatRelativeTime(isoString: string): string {
   if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
   if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
   return `${Math.floor(diffMs / 86_400_000)}d ago`;
+}
+
+/**
+ * Measure the duration of an audio URL by loading it into an HTMLAudioElement
+ * and waiting for the 'loadedmetadata' event.
+ * Resolves with the duration in seconds, or rejects on error.
+ */
+function measureAudioDuration(url: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const audioEl = new Audio();
+    audioEl.src = url;
+    audioEl.addEventListener("loadedmetadata", () => {
+      resolve(audioEl.duration);
+    });
+    audioEl.addEventListener("error", () => {
+      reject(new Error("Failed to load audio metadata."));
+    });
+  });
 }
 
 // ─── Tiptap TemplateChip node ─────────────────────────────────────────────────
@@ -387,6 +414,86 @@ function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
   );
 }
 
+// ─── AudioPlayer ──────────────────────────────────────────────────────────────
+
+interface AudioPlayerProps {
+  url: string;
+  onDelete: () => void;
+  dataTestIdPrefix: string;
+}
+
+/**
+ * Inline audio player showing filename, duration, and play/delete controls.
+ * Duration is measured via HTMLAudioElement loadedmetadata event.
+ */
+function AudioPlayer({ url, onDelete, dataTestIdPrefix }: AudioPlayerProps) {
+  const [duration, setDuration] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audioEl = new Audio();
+    audioEl.src = url;
+    audioRef.current = audioEl;
+    const handleLoaded = () => {
+      setDuration(audioEl.duration);
+    };
+    audioEl.addEventListener("loadedmetadata", handleLoaded);
+    return () => {
+      audioEl.removeEventListener("loadedmetadata", handleLoaded);
+      audioRef.current = null;
+    };
+  }, [url]);
+
+  function handlePlay() {
+    if (audioRef.current) {
+      if (audioRef.current.paused) {
+        void audioRef.current.play();
+      } else {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
+  }
+
+  const filename = extractFilename(url);
+  const durationLabel =
+    duration !== null
+      ? `${Math.round(duration * 10) / 10}s`
+      : "…";
+
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs"
+      data-testid={`${dataTestIdPrefix}-player`}
+    >
+      <button
+        type="button"
+        onClick={handlePlay}
+        className="shrink-0 flex items-center justify-center rounded-full h-5 w-5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        data-testid={`${dataTestIdPrefix}-play-btn`}
+        aria-label="Play audio"
+      >
+        <Play className="h-2.5 w-2.5 fill-current" />
+      </button>
+      <span className="flex-1 truncate font-medium text-foreground" title={url}>
+        {filename}
+      </span>
+      <span className="shrink-0 text-muted-foreground" data-testid={`${dataTestIdPrefix}-duration`}>
+        {durationLabel}
+      </span>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+        data-testid={`${dataTestIdPrefix}-delete-btn`}
+        aria-label="Delete audio"
+      >
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 // ─── ShotCard ─────────────────────────────────────────────────────────────────
 
 interface ShotCardProps {
@@ -431,8 +538,22 @@ function ShotCard({
   const [promptValue, setPromptValue] = useState(shot.prompt);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
+  // ── Poe balance ─────────────────────────────────────────────────────────────
+  const { refreshBalance } = usePoeBalanceContext();
+
   // ── Narration local state ──────────────────────────────────────────────────
   const [narrationText, setNarrationText] = useState(shot.narration.text);
+
+  // ── Audio generation state ─────────────────────────────────────────────────
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Focus rename input when entering rename mode
   useEffect(() => {
@@ -563,6 +684,98 @@ function ShotCard({
     const updatedShots = script.shots.map((s) =>
       s.id === shot.id
         ? { ...s, narration: { ...s.narration, audioSource: source } }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated) {
+      onUpdate(updated);
+    }
+  }
+
+  // ── Audio generation ────────────────────────────────────────────────────────
+
+  async function handleGenerateAudio() {
+    if (isGeneratingAudio) return;
+
+    const settings = getSettings();
+    const apiKey = settings?.poeApiKey;
+    let client;
+    try {
+      client = createLLMClient(apiKey ?? undefined);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setAudioError(
+          err instanceof Error ? err.message : "Failed to create LLM client."
+        );
+      }
+      return;
+    }
+
+    if (isMountedRef.current) {
+      setIsGeneratingAudio(true);
+      setAudioError(null);
+    }
+
+    try {
+      const audioUrl = await client.generateAudio(shot.narration.text);
+      if (!isMountedRef.current) return;
+
+      let durationS: number;
+      try {
+        durationS = await measureAudioDuration(audioUrl);
+      } catch {
+        if (isMountedRef.current) {
+          setAudioError("Failed to measure audio duration.");
+          setIsGeneratingAudio(false);
+          refreshBalance(apiKey);
+        }
+        return;
+      }
+
+      if (!isMountedRef.current) return;
+
+      if (durationS > VIDEO_DURATION) {
+        const roundedS = Math.round(durationS * 10) / 10;
+        setAudioError(
+          `Audio is too long (${roundedS}s). Shorten the narration text and regenerate.`
+        );
+        setIsGeneratingAudio(false);
+        refreshBalance(apiKey);
+        return;
+      }
+
+      const updatedShots = script.shots.map((s) =>
+        s.id === shot.id
+          ? { ...s, narration: { ...s.narration, audioUrl } }
+          : s
+      );
+      const updated = videoStorageService.updateScript(script.id, {
+        shots: updatedShots,
+      });
+      if (updated && isMountedRef.current) {
+        onUpdate(updated);
+      }
+
+      if (isMountedRef.current) {
+        setIsGeneratingAudio(false);
+        refreshBalance(apiKey);
+      }
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setAudioError(
+        err instanceof Error ? err.message : "Audio generation failed."
+      );
+      setIsGeneratingAudio(false);
+      refreshBalance(apiKey);
+    }
+  }
+
+  function handleDeleteAudio() {
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? { ...s, narration: { ...s.narration, audioUrl: undefined } }
         : s
     );
     const updated = videoStorageService.updateScript(script.id, {
@@ -852,14 +1065,60 @@ function ShotCard({
                   {shot.narration.audioSource === "elevenlabs" && (
                     <button
                       type="button"
-                      className="ml-auto flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border border-border bg-background hover:bg-accent transition-colors"
+                      onClick={() => void handleGenerateAudio()}
+                      disabled={isGeneratingAudio || !shot.narration.text.trim()}
+                      className={[
+                        "ml-auto flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border border-border transition-colors",
+                        isGeneratingAudio || !shot.narration.text.trim()
+                          ? "bg-background opacity-50 cursor-not-allowed"
+                          : "bg-background hover:bg-accent",
+                      ].join(" ")}
                       data-testid={`generate-audio-btn-${shot.id}`}
                       aria-label={`Generate audio for shot ${index + 1}`}
+                      aria-busy={isGeneratingAudio}
                     >
-                      Generate Audio
+                      {isGeneratingAudio ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Generating…
+                        </>
+                      ) : (
+                        "Generate Audio"
+                      )}
                     </button>
                   )}
                 </div>
+
+                {/* Audio error message */}
+                {audioError && (
+                  <div
+                    className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                    data-testid={`audio-error-${shot.id}`}
+                    role="alert"
+                  >
+                    <span className="flex-1">{audioError}</span>
+                    {shot.narration.audioSource === "elevenlabs" && (
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerateAudio()}
+                        disabled={isGeneratingAudio || !shot.narration.text.trim()}
+                        className="shrink-0 font-medium underline hover:no-underline disabled:opacity-50"
+                        data-testid={`audio-regenerate-btn-${shot.id}`}
+                      >
+                        Regenerate
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Stored audio URL display */}
+                {!audioError && shot.narration.audioUrl && (
+                  <AudioPlayer
+                    url={shot.narration.audioUrl}
+                    onDelete={handleDeleteAudio}
+                    dataTestIdPrefix={`audio-${shot.id}`}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -1326,6 +1585,10 @@ function ShotModeView({
   const [narrationText, setNarrationText] = useState(shot.narration.text);
   const [generateCount, setGenerateCount] = useState(1);
 
+  // ── Audio generation state ─────────────────────────────────────────────────
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+
   // ── Generation state ───────────────────────────────────────────────────────
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationSlots, setGenerationSlots] = useState<GenerationSlotState[]>([]);
@@ -1338,9 +1601,10 @@ function ShotModeView({
   const [autocompleteQuery, setAutocompleteQuery] = useState("");
   const autocompleteRef = useRef<HTMLDivElement>(null);
 
-  // Sync narrationText when shot changes (navigating shots)
+  // Sync narrationText and clear audio error when shot changes (navigating shots)
   useEffect(() => {
     setNarrationText(shot.narration.text);
+    setAudioError(null);
   }, [shot.id, shot.narration.text]);
 
   // ── Tiptap editor ──────────────────────────────────────────────────────────
@@ -1571,6 +1835,122 @@ function ShotModeView({
     const updatedShots = script.shots.map((s) =>
       s.id === shot.id
         ? { ...s, narration: { ...s.narration, audioSource: source } }
+        : s
+    );
+    const updated = videoStorageService.updateScript(script.id, {
+      shots: updatedShots,
+    });
+    if (updated && isMountedRef.current) {
+      onUpdate(updated);
+    }
+  }
+
+  // ── Audio generation ──────────────────────────────────────────────────────
+
+  /**
+   * Generate ElevenLabs narration audio for this shot.
+   * - Calls LLMClient.generateAudio(narrationText)
+   * - Measures the audio duration using HTMLAudioElement
+   * - If duration > VIDEO_DURATION, rejects (does not store) and shows an error
+   * - On success, stores the audioUrl in shot.narration.audioUrl
+   * - refreshBalance is called after completion (success or rejection)
+   * - isMounted ref guards all setState calls after await
+   */
+  const handleGenerateAudio = useCallback(async () => {
+    if (isGeneratingAudio) return;
+
+    const settings = getSettings();
+    const apiKey = settings?.poeApiKey;
+    let client;
+    try {
+      client = createLLMClient(apiKey ?? undefined);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setAudioError(
+          err instanceof Error ? err.message : "Failed to create LLM client."
+        );
+      }
+      return;
+    }
+
+    if (isMountedRef.current) {
+      setIsGeneratingAudio(true);
+      setAudioError(null);
+    }
+
+    try {
+      const audioUrl = await client.generateAudio(shot.narration.text);
+      if (!isMountedRef.current) return;
+
+      // Measure duration using HTMLAudioElement
+      let durationS: number;
+      try {
+        durationS = await measureAudioDuration(audioUrl);
+      } catch {
+        if (isMountedRef.current) {
+          setAudioError("Failed to measure audio duration.");
+          setIsGeneratingAudio(false);
+          refreshBalance(apiKey);
+        }
+        return;
+      }
+
+      if (!isMountedRef.current) return;
+
+      // Reject if audio is longer than the clip duration
+      if (durationS > VIDEO_DURATION) {
+        const roundedS = Math.round(durationS * 10) / 10;
+        setAudioError(
+          `Audio is too long (${roundedS}s). Shorten the narration text and regenerate.`
+        );
+        setIsGeneratingAudio(false);
+        refreshBalance(apiKey);
+        return;
+      }
+
+      // Store the audio URL
+      const updatedShots = script.shots.map((s) =>
+        s.id === shot.id
+          ? { ...s, narration: { ...s.narration, audioUrl } }
+          : s
+      );
+      const updated = videoStorageService.updateScript(script.id, {
+        shots: updatedShots,
+      });
+      if (updated && isMountedRef.current) {
+        onUpdate(updated);
+      }
+
+      if (isMountedRef.current) {
+        setIsGeneratingAudio(false);
+        refreshBalance(apiKey);
+      }
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setAudioError(
+        err instanceof Error ? err.message : "Audio generation failed."
+      );
+      setIsGeneratingAudio(false);
+      refreshBalance(apiKey);
+    }
+  }, [
+    isGeneratingAudio,
+    shot.id,
+    shot.narration.text,
+    script.id,
+    script.shots,
+    isMountedRef,
+    onUpdate,
+    refreshBalance,
+  ]);
+
+  /**
+   * Delete the stored audio URL for this shot.
+   */
+  function handleDeleteAudio() {
+    const updatedShots = script.shots.map((s) =>
+      s.id === shot.id
+        ? { ...s, narration: { ...s.narration, audioUrl: undefined } }
         : s
     );
     const updated = videoStorageService.updateScript(script.id, {
@@ -2091,14 +2471,60 @@ function ShotModeView({
               {shot.narration.audioSource === "elevenlabs" && (
                 <button
                   type="button"
-                  className="ml-auto flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border border-border bg-background hover:bg-accent transition-colors"
+                  onClick={() => void handleGenerateAudio()}
+                  disabled={isGeneratingAudio || !shot.narration.text.trim()}
+                  className={[
+                    "ml-auto flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border border-border transition-colors",
+                    isGeneratingAudio || !shot.narration.text.trim()
+                      ? "bg-background opacity-50 cursor-not-allowed"
+                      : "bg-background hover:bg-accent",
+                  ].join(" ")}
                   data-testid="shot-mode-generate-audio-btn"
                   aria-label="Generate narration audio"
+                  aria-busy={isGeneratingAudio}
                 >
-                  Generate Audio
+                  {isGeneratingAudio ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Generating…
+                    </>
+                  ) : (
+                    "Generate Audio"
+                  )}
                 </button>
               )}
             </div>
+
+            {/* Audio error message */}
+            {audioError && (
+              <div
+                className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                data-testid="shot-mode-audio-error"
+                role="alert"
+              >
+                <span className="flex-1">{audioError}</span>
+                {shot.narration.audioSource === "elevenlabs" && (
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateAudio()}
+                    disabled={isGeneratingAudio || !shot.narration.text.trim()}
+                    className="shrink-0 font-medium underline hover:no-underline disabled:opacity-50"
+                    data-testid="shot-mode-audio-regenerate-btn"
+                  >
+                    Regenerate
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Stored audio URL display */}
+            {!audioError && shot.narration.audioUrl && (
+              <AudioPlayer
+                url={shot.narration.audioUrl}
+                onDelete={handleDeleteAudio}
+                dataTestIdPrefix="shot-mode-audio"
+              />
+            )}
           </div>
         )}
       </div>
