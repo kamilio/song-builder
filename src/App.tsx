@@ -19,6 +19,8 @@ import Settings from "@/music/pages/Settings";
 import VideoHome from "@/video/pages/VideoHome";
 import VideoScripts from "@/video/pages/VideoScripts";
 import VideoScriptView from "@/video/pages/VideoScriptView";
+import VideoShotView from "@/video/pages/VideoShotView";
+import VideoScriptSettings from "@/video/pages/VideoScriptSettings";
 import VideoVideos from "@/video/pages/VideoVideos";
 import VideoPinnedVideos from "@/video/pages/VideoPinnedVideos";
 import VideoTemplates from "@/video/pages/VideoTemplates";
@@ -320,6 +322,36 @@ export default function App() {
           element={
             <VideoPageLayout>
               <VideoScriptView />
+            </VideoPageLayout>
+          }
+        />
+
+        {/* Video — Script templates sub-route (must be before /:shotId) */}
+        <Route
+          path="/video/scripts/:id/templates"
+          element={
+            <VideoPageLayout>
+              <VideoScriptView />
+            </VideoPageLayout>
+          }
+        />
+
+        {/* Video — Script settings sub-route (must be before /:shotId) */}
+        <Route
+          path="/video/scripts/:id/settings"
+          element={
+            <VideoPageLayout>
+              <VideoScriptSettings />
+            </VideoPageLayout>
+          }
+        />
+
+        {/* Video — Shot detail sub-route (after /templates and /settings) */}
+        <Route
+          path="/video/scripts/:id/:shotId"
+          element={
+            <VideoPageLayout>
+              <VideoShotView />
             </VideoPageLayout>
           }
         />

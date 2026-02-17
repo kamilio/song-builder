@@ -8,8 +8,11 @@
  *   /pinned                  → Pinned Songs
  *   /settings                → Settings
  *
- *   /video/scripts           → Video Scripts
- *   /video/scripts/:id       → Video Scripts / {script title}
+ *   /video/scripts           → Scripts
+ *   /video/scripts/:id       → Scripts / {script title}
+ *   /video/scripts/:id/templates → Scripts / {script title} / Templates
+ *   /video/scripts/:id/settings  → Scripts / {script title} / Settings
+ *   /video/scripts/:id/:shotId   → Scripts / {script title} / {shot title}
  *   /video/videos            → All Videos
  *   /video/videos/pinned     → Pinned Videos
  *   /video/templates         → Video Templates
@@ -32,23 +35,58 @@ interface Segment {
 
 function useSegments(): Segment[] {
   const { pathname } = useLocation();
-  const { id } = useParams<{ id?: string }>();
+  const { id, shotId } = useParams<{ id?: string; shotId?: string }>();
 
   // ── Video routes ────────────────────────────────────────────────────────
+
+  // /video/scripts/:id/templates
+  if (pathname.match(/^\/video\/scripts\/[^/]+\/templates$/)) {
+    const script = id ? getScript(id) : null;
+    const title = script?.title ?? id ?? "…";
+    return [
+      { label: "Scripts", href: "/video/scripts" },
+      { label: title, href: `/video/scripts/${id}` },
+      { label: "Templates" },
+    ];
+  }
+
+  // /video/scripts/:id/settings
+  if (pathname.match(/^\/video\/scripts\/[^/]+\/settings$/)) {
+    const script = id ? getScript(id) : null;
+    const title = script?.title ?? id ?? "…";
+    return [
+      { label: "Scripts", href: "/video/scripts" },
+      { label: title, href: `/video/scripts/${id}` },
+      { label: "Settings" },
+    ];
+  }
+
+  // /video/scripts/:id/:shotId — shot detail view
+  if (pathname.match(/^\/video\/scripts\/[^/]+\/[^/]+$/) && shotId) {
+    const script = id ? getScript(id) : null;
+    const scriptTitle = script?.title ?? id ?? "…";
+    const shot = script?.shots.find((s) => s.id === shotId);
+    const shotTitle = shot?.title ?? shotId ?? "…";
+    return [
+      { label: "Scripts", href: "/video/scripts" },
+      { label: scriptTitle, href: `/video/scripts/${id}` },
+      { label: shotTitle },
+    ];
+  }
 
   // /video/scripts/:id — fetch title from video storage
   if (pathname.match(/^\/video\/scripts\/[^/]+$/)) {
     const script = id ? getScript(id) : null;
     const title = script?.title ?? id ?? "…";
     return [
-      { label: "Video Scripts", href: "/video/scripts" },
+      { label: "Scripts", href: "/video/scripts" },
       { label: title },
     ];
   }
 
   // /video/scripts (list)
   if (pathname === "/video/scripts") {
-    return [{ label: "Video Scripts" }];
+    return [{ label: "Scripts" }];
   }
 
   // /video/videos/pinned (must be before /video/videos)
@@ -121,6 +159,7 @@ export function Breadcrumb() {
     <nav
       aria-label="Breadcrumb"
       className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 overflow-hidden"
+      data-testid="breadcrumb"
     >
       {segments.map((seg, idx) => {
         const isLast = idx === segments.length - 1;
@@ -129,7 +168,7 @@ export function Breadcrumb() {
           <span key={idx} className="flex items-center gap-1 min-w-0">
             {idx > 0 && (
               <span className="shrink-0 select-none" aria-hidden="true">
-                /
+                ›
               </span>
             )}
             {isLast ? (
@@ -137,6 +176,7 @@ export function Breadcrumb() {
                 className="font-medium text-foreground truncate max-w-[160px] sm:max-w-none shrink-0"
                 aria-current="page"
                 title={seg.label}
+                data-testid={`breadcrumb-segment-${idx}`}
               >
                 {seg.label}
               </span>
@@ -145,6 +185,7 @@ export function Breadcrumb() {
                 to={seg.href!}
                 className="truncate hover:text-foreground transition-colors min-w-0 shrink"
                 title={seg.label}
+                data-testid={`breadcrumb-segment-${idx}`}
               >
                 {seg.label}
               </Link>

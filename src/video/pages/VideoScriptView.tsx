@@ -3020,7 +3020,7 @@ function ShotModeView({
 // ─── Main page component ──────────────────────────────────────────────────────
 
 function VideoScriptViewInner() {
-  const { id } = useParams<{ id: string }>();
+  const { id, shotId } = useParams<{ id: string; shotId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { refreshBalance } = usePoeBalanceContext();
@@ -3032,14 +3032,27 @@ function VideoScriptViewInner() {
    */
   const locationState = location.state as { targetShotIndex?: number } | null;
 
+  // Detect which sub-route we are on from the pathname.
+  // - /video/scripts/:id            → write mode (index)
+  // - /video/scripts/:id/templates  → tmpl mode
+  // - /video/scripts/:id/:shotId    → shot mode (shotId is defined)
+  const isTemplatesRoute = location.pathname.endsWith("/templates");
+  const isShotRoute = Boolean(shotId);
+
   // ─── Script state ──────────────────────────────────────────────────────────
   const [script, setScript] = useState<Script | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   // ─── Editor state ──────────────────────────────────────────────────────────
-  const [mode, setMode] = useState<EditorMode>(() =>
-    typeof locationState?.targetShotIndex === "number" ? "shot" : "write"
-  );
+  // Mode is derived directly from the URL so it stays reactive to navigation.
+  // All mode changes are performed by navigating to the correct sub-route, so
+  // no local setState for mode is needed.
+  const mode: EditorMode = (() => {
+    if (isShotRoute) return "shot";
+    if (isTemplatesRoute) return "tmpl";
+    if (typeof locationState?.targetShotIndex === "number") return "shot";
+    return "write";
+  })();
   const [activeShotIndex, setActiveShotIndex] = useState<number>(() =>
     typeof locationState?.targetShotIndex === "number"
       ? locationState.targetShotIndex
@@ -3077,7 +3090,19 @@ function VideoScriptViewInner() {
       return;
     }
     setScript(found);
-  }, [id]);
+
+    // When on the /:id/:shotId route, resolve the shot index from the shotId.
+    // If the shotId is not found, redirect back to /:id.
+    if (isShotRoute && shotId) {
+      const idx = found.shots.findIndex((s) => s.id === shotId);
+      if (idx === -1) {
+        navigate(`/video/scripts/${id}`, { replace: true });
+        return;
+      }
+      setActiveShotIndex(idx);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, shotId]);
 
   // ─── Redirect if not found ────────────────────────────────────────────────
   useEffect(() => {
@@ -3092,10 +3117,11 @@ function VideoScriptViewInner() {
   }, [chatMessages]);
 
   // ─── Listen for switch-to-templates custom event ──────────────────────────
+  // Navigates to the /templates sub-route (URL-based routing for US-067).
   useEffect(() => {
     function handleSwitchToTemplates() {
-      if (isMounted.current) {
-        setMode("tmpl");
+      if (isMounted.current && id) {
+        navigate(`/video/scripts/${id}/templates`);
       }
     }
     document.addEventListener("switch-to-templates", handleSwitchToTemplates);
@@ -3104,7 +3130,8 @@ function VideoScriptViewInner() {
         "switch-to-templates",
         handleSwitchToTemplates
       );
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // ─── Add a new blank shot ─────────────────────────────────────────────────
   const handleAddShot = useCallback(() => {
@@ -3179,68 +3206,79 @@ function VideoScriptViewInner() {
   }, []);
 
   // ─── Switch to Shot mode at a given index ─────────────────────────────────
+  // Navigates to /video/scripts/:id/:shotId (URL-based routing for US-067).
   const handleSwitchToShotMode = useCallback(
     (shotIndex: number) => {
-      if (isMounted.current) {
-        setActiveShotIndex(shotIndex);
-        setMode((prevMode) => {
-          if (script) {
-            log({
-              category: "user:action",
-              action: "video:mode:change",
-              data: { scriptId: script.id, from: prevMode, to: "shot" },
-            });
-          }
-          return "shot";
-        });
-      }
+      if (!script) return;
+      const shot = script.shots[shotIndex];
+      if (!shot) return;
+      log({
+        category: "user:action",
+        action: "video:mode:change",
+        data: { scriptId: script.id, from: mode, to: "shot" },
+      });
+      navigate(`/video/scripts/${script.id}/${shot.id}`);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [script]
+    [script, mode, navigate]
   );
 
   // ─── Navigate within Shot mode ────────────────────────────────────────────
+  // When on the /:id/:shotId route, push a new route for the next/prev shot.
+  // When in in-page shot mode (legacy state from location.state), update state.
   const handleShotNavigate = useCallback(
     (newIndex: number) => {
       if (!script) return;
       if (newIndex < 0 || newIndex >= script.shots.length) return;
-      if (isMounted.current) {
-        setActiveShotIndex((prevIndex) => {
-          log({
-            category: "user:action",
-            action: "video:shot:navigate",
-            data: { scriptId: script.id, fromIndex: prevIndex, toIndex: newIndex },
-          });
-          return newIndex;
-        });
+      const fromIndex = activeShotIndex;
+      log({
+        category: "user:action",
+        action: "video:shot:navigate",
+        data: { scriptId: script.id, fromIndex, toIndex: newIndex },
+      });
+      if (isShotRoute) {
+        // URL-based: navigate to the next shot's route
+        const nextShot = script.shots[newIndex];
+        if (nextShot) {
+          navigate(`/video/scripts/${script.id}/${nextShot.id}`);
+        }
+      } else if (isMounted.current) {
+        setActiveShotIndex(newIndex);
       }
     },
-    [script]
+    [script, activeShotIndex, isShotRoute, navigate]
   );
 
   // ─── Mode change ──────────────────────────────────────────────────────────
   const handleModeChange = useCallback(
     (newMode: EditorMode) => {
+      if (!script) return;
       if (isMounted.current) {
-        setMode((prevMode) => {
-          if (script && newMode !== prevMode) {
-            log({
-              category: "user:action",
-              action: "video:mode:change",
-              data: { scriptId: script.id, from: prevMode, to: newMode },
-            });
-          }
-          return newMode;
-        });
-        // When switching to Shot mode, clamp index to valid range
-        if (newMode === "shot" && script) {
-          setActiveShotIndex((prev) =>
-            Math.min(prev, Math.max(0, script.shots.length - 1))
+        if (newMode !== mode) {
+          log({
+            category: "user:action",
+            action: "video:mode:change",
+            data: { scriptId: script.id, from: mode, to: newMode },
+          });
+        }
+        if (newMode === "shot") {
+          // Navigate to shot URL instead of toggling state
+          const clampedIndex = Math.min(
+            activeShotIndex,
+            Math.max(0, script.shots.length - 1)
           );
+          const shot = script.shots[clampedIndex];
+          if (shot) {
+            navigate(`/video/scripts/${script.id}/${shot.id}`);
+          }
+        } else if (newMode === "tmpl") {
+          navigate(`/video/scripts/${script.id}/templates`);
+        } else {
+          // write mode — navigate back to script index
+          navigate(`/video/scripts/${script.id}`);
         }
       }
     },
-    [script]
+    [script, mode, activeShotIndex, navigate]
   );
 
   // ─── Drag-and-drop sensors (US-043) ──────────────────────────────────────
