@@ -2354,9 +2354,10 @@ function ShotModeView({
           pinned: false,
         };
         const updatedHistory = [...latestShot.video.history, newEntry];
+        const newSelectedUrl = latestShot.video.selectedUrl ?? url;
         const updatedShots = latestScript.shots.map((s) =>
           s.id === shot.id
-            ? { ...s, video: { ...s.video, history: updatedHistory } }
+            ? { ...s, video: { ...s.video, history: updatedHistory, selectedUrl: newSelectedUrl } }
             : s
         );
         const updated = videoStorageService.updateScript(script.id, {
@@ -2477,9 +2478,10 @@ function ShotModeView({
           pinned: false,
         };
         const updatedHistory = [...latestShot.video.history, newEntry];
+        const newSelectedUrl = latestShot.video.selectedUrl ?? url;
         const updatedShots = latestScript.shots.map((s) =>
           s.id === shot.id
-            ? { ...s, video: { ...s.video, history: updatedHistory } }
+            ? { ...s, video: { ...s.video, history: updatedHistory, selectedUrl: newSelectedUrl } }
             : s
         );
         const updated = videoStorageService.updateScript(script.id, {

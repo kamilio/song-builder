@@ -270,15 +270,23 @@ test.describe("US-055: Shot mode, video generation, and take management", () => 
       (logAfterGeneration.startData as Record<string, unknown>)?.count
     ).toBe(1);
 
-    // ── Step 9: Click Select on the new video (card index 1) ─────────────────
+    // ── Step 9: Verify the new video (card index 1) is auto-selected after
+    //            generation (US-073), then click Select on the pre-existing
+    //            video (card index 0) to trigger a real video:take:select event.
     const selectBtn1 = page.getByTestId("video-select-btn-1");
     await expect(selectBtn1).toBeVisible();
-    await selectBtn1.click();
-
-    // Button text should now show "Selected"
+    // Auto-select fired during generation: new video should already be selected.
     await expect(selectBtn1).toContainText(/selected/i);
 
-    // Verify storage selectedUrl matches the new video
+    // Now select the pre-existing video (index 0) to trigger a select action.
+    const selectBtn0 = page.getByTestId("video-select-btn-0");
+    await expect(selectBtn0).toBeVisible();
+    await selectBtn0.click();
+
+    // Button text should now show "Selected"
+    await expect(selectBtn0).toContainText(/selected/i);
+
+    // Verify storage selectedUrl is set (now pointing to pre-existing video)
     const storageAfterSelect = await page.evaluate(
       (args: { sid: string; shotId: string }) => {
         const script = window.videoStorageService.getScript(args.sid);
@@ -287,7 +295,7 @@ test.describe("US-055: Shot mode, video generation, and take management", () => 
       },
       { sid: scriptId, shotId: shot2Id }
     );
-    // The new video URL should be stored (it's from the mock fixture)
+    // A video URL should be stored (pre-existing video was selected)
     expect(storageAfterSelect.selectedUrl).toBeTruthy();
 
     // ── Step 10: Assert video:take:select event in action log ─────────────────
