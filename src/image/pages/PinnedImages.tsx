@@ -9,9 +9,9 @@
  * An empty state message is shown when no images are pinned.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ImageIcon, Pin, PinOff, Plus, Settings, Bug } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageIcon, Maximize2, Pin, PinOff, Plus, Settings, Bug, X } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { NavMenu } from "@/shared/components/NavMenu";
 import type { MenuItem } from "@/shared/components/NavMenu";
@@ -84,9 +84,10 @@ function TopBar() {
 interface PinnedImageItemProps {
   item: ImageItem;
   onUnpin: (item: ImageItem) => void;
+  onOpenFullscreen: (item: ImageItem) => void;
 }
 
-function PinnedImageItem({ item, onUnpin }: PinnedImageItemProps) {
+function PinnedImageItem({ item, onUnpin, onOpenFullscreen }: PinnedImageItemProps) {
   return (
     <div
       className="relative rounded-lg overflow-hidden border bg-card shadow-sm"
@@ -95,10 +96,12 @@ function PinnedImageItem({ item, onUnpin }: PinnedImageItemProps) {
       <img
         src={item.url}
         alt=""
-        className="block w-full h-auto"
+        className="block w-full h-auto cursor-zoom-in"
         style={{ maxWidth: "240px", maxHeight: "240px", objectFit: "cover" }}
+        onClick={() => onOpenFullscreen(item)}
+        aria-label="Open fullscreen"
       />
-      <div className="absolute bottom-2 right-2">
+      <div className="absolute bottom-2 right-2 flex gap-1">
         <Button
           variant="outline"
           size="sm"
@@ -110,7 +113,131 @@ function PinnedImageItem({ item, onUnpin }: PinnedImageItemProps) {
           <PinOff className="h-3 w-3" aria-hidden="true" />
           Unpin
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onOpenFullscreen(item)}
+          aria-label="Open fullscreen viewer"
+          data-testid="fullscreen-btn"
+          className="flex items-center gap-1 bg-background/90 hover:bg-background"
+        >
+          <Maximize2 className="h-3 w-3" aria-hidden="true" />
+        </Button>
       </div>
+    </div>
+  );
+}
+
+// ─── Simple fullscreen viewer for a flat list of images ───────────────────
+
+interface SimpleImageViewerProps {
+  items: ImageItem[];
+  initialItem: ImageItem;
+  onClose: () => void;
+}
+
+function SimpleImageViewer({ items, initialItem, onClose }: SimpleImageViewerProps) {
+  const [currentIndex, setCurrentIndex] = useState<number>(() => {
+    const idx = items.findIndex((i) => i.id === initialItem.id);
+    return idx >= 0 ? idx : 0;
+  });
+
+  const goToPrev = useCallback(() => {
+    if (items.length <= 1) return;
+    setCurrentIndex((prev) => (prev - 1 + items.length) % items.length);
+  }, [items.length]);
+
+  const goToNext = useCallback(() => {
+    if (items.length <= 1) return;
+    setCurrentIndex((prev) => (prev + 1) % items.length);
+  }, [items.length]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") goToPrev();
+      else if (e.key === "ArrowRight") goToNext();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, goToPrev, goToNext]);
+
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target === e.currentTarget) onClose();
+    },
+    [onClose],
+  );
+
+  if (items.length === 0) return null;
+  const safeIndex = Math.min(currentIndex, items.length - 1);
+  const currentItem = items[safeIndex];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Fullscreen image viewer"
+      data-testid="fullscreen-viewer"
+      onClick={handleBackdropClick}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close fullscreen viewer"
+        data-testid="fullscreen-close-btn"
+        className="absolute top-4 right-4 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+      >
+        <X className="h-5 w-5" aria-hidden="true" />
+      </button>
+
+      {items.length > 1 && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); goToPrev(); }}
+          aria-label="Previous image"
+          data-testid="fullscreen-prev-btn"
+          className="absolute left-4 top-1/2 -translate-y-1/2 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+        >
+          <ChevronLeft className="h-6 w-6" aria-hidden="true" />
+        </button>
+      )}
+
+      <div
+        className="relative max-w-[90vw] max-h-[85vh] flex items-center justify-center"
+        data-testid="fullscreen-image-container"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          key={currentItem.id}
+          src={currentItem.url}
+          alt=""
+          className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+          data-testid="fullscreen-image"
+        />
+        {items.length > 1 && (
+          <div
+            className="absolute bottom-2 right-2 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white tabular-nums"
+            data-testid="fullscreen-counter"
+            aria-label={`Image ${safeIndex + 1} of ${items.length}`}
+          >
+            {safeIndex + 1} / {items.length}
+          </div>
+        )}
+      </div>
+
+      {items.length > 1 && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); goToNext(); }}
+          aria-label="Next image"
+          data-testid="fullscreen-next-btn"
+          className="absolute right-4 top-1/2 -translate-y-1/2 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+        >
+          <ChevronRight className="h-6 w-6" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
@@ -125,6 +252,8 @@ export default function PinnedImages() {
       .items.filter((item) => item.pinned && !item.deleted)
   );
 
+  const [viewerItem, setViewerItem] = useState<ImageItem | null>(null);
+
   /** Unpin an item: update storage and remove it from the list immediately. */
   const handleUnpin = useCallback((item: ImageItem) => {
     imageStorageService.updateItem(item.id, { pinned: false });
@@ -134,6 +263,14 @@ export default function PinnedImages() {
       data: { itemId: item.id },
     });
     setPinnedItems((prev) => prev.filter((i) => i.id !== item.id));
+  }, []);
+
+  const handleOpenFullscreen = useCallback((item: ImageItem) => {
+    setViewerItem(item);
+  }, []);
+
+  const handleCloseFullscreen = useCallback(() => {
+    setViewerItem(null);
   }, []);
 
   return (
@@ -168,11 +305,19 @@ export default function PinnedImages() {
             data-testid="pinned-image-list"
           >
             {pinnedItems.map((item) => (
-              <PinnedImageItem key={item.id} item={item} onUnpin={handleUnpin} />
+              <PinnedImageItem key={item.id} item={item} onUnpin={handleUnpin} onOpenFullscreen={handleOpenFullscreen} />
             ))}
           </div>
         )}
       </main>
+
+      {viewerItem && pinnedItems.length > 0 && (
+        <SimpleImageViewer
+          items={pinnedItems}
+          initialItem={viewerItem}
+          onClose={handleCloseFullscreen}
+        />
+      )}
     </div>
   );
 }
