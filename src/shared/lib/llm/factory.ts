@@ -18,8 +18,7 @@ export function createLLMClient(apiKey?: string): LLMClient {
 
   if (!apiKey) {
     throw new Error(
-      "POE_API_KEY is required when VITE_USE_MOCK_LLM is not set. " +
-        "Configure your API key in Settings.",
+      "Poe API key is required. Configure your API key in Settings.",
     );
   }
 

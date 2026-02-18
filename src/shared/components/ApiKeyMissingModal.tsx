@@ -19,7 +19,7 @@ type VerifyState =
   | { status: "error"; message: string };
 
 /**
- * Blocking modal shown when a user triggers generation without a valid POE API key.
+ * Blocking modal shown when a user triggers generation without a valid Poe API key.
  *
  * US-023: The modal now includes an inline API key input that verifies the key
  * against GET https://api.poe.com/usage/current_balance before saving. Inline
@@ -109,11 +109,19 @@ export function ApiKeyMissingModal({ onClose, onProceed }: ApiKeyMissingModalPro
           id="api-key-modal-title"
           className="text-lg font-semibold mb-2"
         >
-          API Key Required
+          Poe API Key Required
         </h2>
         <p className="text-muted-foreground mb-4">
-          A POE API key is required to generate content. Enter your key below
-          to continue.
+          A Poe API key is required to generate content. Enter your key below
+          to continue. Get your key at{" "}
+          <a
+            href="https://poe.com/api/keys"
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            poe.com/api/keys
+          </a>.
         </p>
 
         <div className="mb-4">
@@ -121,7 +129,7 @@ export function ApiKeyMissingModal({ onClose, onProceed }: ApiKeyMissingModalPro
             htmlFor="api-key-input"
             className="block text-sm font-medium mb-1"
           >
-            POE API Key
+            Poe API Key
           </label>
           <Textarea
             id="api-key-input"
@@ -135,7 +143,7 @@ export function ApiKeyMissingModal({ onClose, onProceed }: ApiKeyMissingModalPro
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Paste your POE API key here"
+            placeholder="Paste your Poe API key here"
             rows={2}
             disabled={isVerifying}
             aria-describedby={
