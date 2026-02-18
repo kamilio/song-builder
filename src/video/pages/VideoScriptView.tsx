@@ -2006,6 +2006,8 @@ function ShotModeView({
     (newPrompt: string) => {
       if (!isMountedRef.current) return;
       if (newPrompt === shot.prompt) return;
+      // Mark as "ours" so the sync effect doesn't reset the editor
+      lastPushedPromptRef.current = newPrompt;
       const updatedShots = script.shots.map((s) =>
         s.id === shot.id ? { ...s, prompt: newPrompt } : s
       );
@@ -2020,14 +2022,18 @@ function ShotModeView({
     [script.id, shot.id, shot.prompt]
   );
 
-  // Re-initialise editor content when navigating to a different shot
+  // Re-initialise editor content when navigating to a different shot or when
+  // the prompt changes externally (e.g. AI tool call).  We compare against the
+  // last value we wrote to Tiptap so we skip resets caused by the user typing.
+  const lastPushedPromptRef = useRef(shot.prompt);
   useEffect(() => {
     if (!editor) return;
-    const newContent = promptToTiptapContent(shot.prompt);
-    // Only reset if shot changed (avoid resetting while user is typing)
-    editor.commands.setContent(newContent as Parameters<typeof editor.commands.setContent>[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shot.id]);
+    if (shot.prompt !== lastPushedPromptRef.current) {
+      const newContent = promptToTiptapContent(shot.prompt);
+      editor.commands.setContent(newContent as Parameters<typeof editor.commands.setContent>[0]);
+      lastPushedPromptRef.current = shot.prompt;
+    }
+  }, [editor, shot.id, shot.prompt]);
 
   // Close autocomplete on outside click
   useEffect(() => {
