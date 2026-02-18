@@ -3728,13 +3728,27 @@ function VideoScriptViewInner() {
               `  globalPrompt: ${script.settings.globalPrompt || "(empty)"}`,
               "",
               `Shots (${script.shots.length}):`,
-              ...script.shots.map((s, idx) =>
-                [
+              ...script.shots.map((s, idx) => {
+                const lines = [
                   `  Shot ${idx + 1}: id=${s.id}, title="${s.title}"`,
                   `    prompt: ${s.prompt || "(empty)"}`,
                   `    narration: enabled=${String(s.narration.enabled)}, text="${s.narration.text || ""}", audioSource=${s.narration.audioSource}`,
                   `    subtitles: ${String(s.subtitles)}, duration: ${s.duration}s`,
-                ].join("\n")
+                ];
+                if (s.video.selectedUrl) {
+                  lines.push(`    selectedVideoUrl: ${s.video.selectedUrl}`);
+                }
+                if (s.video.history.length > 0) {
+                  lines.push(`    videoHistory (${s.video.history.length} takes):`);
+                  for (const h of s.video.history) {
+                    const parts = [`url=${h.url}`];
+                    if (h.model) parts.push(`model=${h.model}`);
+                    if (h.pinned) parts.push("pinned");
+                    lines.push(`      - ${parts.join(", ")}`);
+                  }
+                }
+                return lines.join("\n");
+              }
               ),
             ].join("\n")
           : "You are a creative assistant helping the user develop a video script.";
