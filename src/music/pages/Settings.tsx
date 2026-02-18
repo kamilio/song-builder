@@ -70,7 +70,7 @@ export default function Settings() {
   const [savedMessage, setSavedMessage] = useState("");
   const [importError, setImportError] = useState("");
   const [showResetDialog, setShowResetDialog] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Chat model list fetched from POE V1 API, pre-populated from cache
   const [chatModels, setChatModels] = useState<{ id: string; label: string }[]>(
@@ -161,9 +161,6 @@ export default function Settings() {
     URL.revokeObjectURL(url);
   }
 
-  function handleImportClick() {
-    fileInputRef.current?.click();
-  }
 
   function handleResetConfirm() {
     resetStorage();
@@ -391,22 +388,18 @@ export default function Settings() {
               Export Data
             </button>
 
-            <button
-              type="button"
-              onClick={handleImportClick}
-              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <label
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
             >
               Import Data
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleFileChange}
-              className="sr-only"
-              aria-label="Import JSON file"
-            />
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={handleFileChange}
+                className="sr-only"
+                aria-label="Import JSON file"
+              />
+            </label>
           </div>
 
           {importError && (
