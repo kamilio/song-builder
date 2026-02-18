@@ -198,10 +198,14 @@ test.describe("US-054: Write mode shot interactions", () => {
     );
     expect(logAfterPromptEdit.hasEditEvent).toBe(true);
 
-    // ── Step 7: Toggle narration on for shot 2; assert narration textarea ──────
-    const narrationToggle2 = page.getByTestId(`narration-toggle-${shot2Id}`);
-    await expect(narrationToggle2).toBeVisible();
-    await narrationToggle2.click();
+    // ── Step 7: Toggle narration on for shot 2 via overflow menu; assert narration textarea
+    const shotMenu2 = page.getByTestId(`shot-menu-${shot2Id}`);
+    await expect(shotMenu2).toBeVisible();
+    await shotMenu2.click();
+
+    const narrationMenuItem2 = page.getByTestId(`shot-narration-menu-${shot2Id}`);
+    await expect(narrationMenuItem2).toBeVisible();
+    await narrationMenuItem2.click();
 
     // Narration textarea should now be visible
     const narrationText2 = page.getByTestId(`narration-text-${shot2Id}`);

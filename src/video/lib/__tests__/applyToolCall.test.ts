@@ -16,7 +16,7 @@
 import { test, expect } from "@playwright/test";
 import { applyToolCall } from "../applyToolCall";
 import type { Script } from "../storage/types";
-import { VIDEO_DURATIONS } from "../config";
+import { DEFAULT_VIDEO_DURATION } from "../config";
 
 // ─── Fixture builders ──────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ function makeScript(overrides: Partial<Script> = {}): Script {
         },
         video: { selectedUrl: null, history: [] },
         subtitles: false,
-        duration: VIDEO_DURATIONS[0],
+        duration: DEFAULT_VIDEO_DURATION,
       },
       {
         id: "shot-2",
@@ -58,7 +58,7 @@ function makeScript(overrides: Partial<Script> = {}): Script {
         },
         video: { selectedUrl: null, history: [] },
         subtitles: true,
-        duration: VIDEO_DURATIONS[0],
+        duration: DEFAULT_VIDEO_DURATION,
       },
     ],
     templates: {},
@@ -281,7 +281,7 @@ test.describe("add_shot", () => {
       script.settings.narrationEnabled
     );
     expect(result.shots[2].subtitles).toBe(script.settings.subtitles);
-    expect(result.shots[2].duration).toBe(VIDEO_DURATIONS[0]);
+    expect(result.shots[2].duration).toBe(DEFAULT_VIDEO_DURATION);
     expect(result.shots[2].video.selectedUrl).toBeNull();
     expect(result.shots[2].video.history).toHaveLength(0);
     // Original shots unchanged

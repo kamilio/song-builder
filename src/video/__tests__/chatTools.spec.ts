@@ -57,7 +57,7 @@ async function seedChatScript(
   return page.evaluate((shotId: string) => {
     localStorage.clear();
 
-    // Seed POE API key so ApiKeyGuard doesn't block the editor.
+    // Seed Poe API key so ApiKeyGuard doesn't block the editor.
     const settingsKey = "ai-studio:settings";
     localStorage.setItem(
       settingsKey,
@@ -109,20 +109,42 @@ async function seedChatScript(
 
 /**
  * Sends a chat message by filling the textarea and clicking Send.
- * Waits for the loading indicator to disappear before returning.
+ * Waits for either a new assistant text bubble or new tool-call cards to
+ * appear — this handles all response types including tool-call-only
+ * responses where `text` is empty and no assistant bubble renders.
  */
 async function sendChatMessage(
   page: import("@playwright/test").Page,
   message: string
 ): Promise<void> {
+  const messageList = page.getByTestId("chat-message-list");
+  const assistantCountBefore = await messageList
+    .locator('[data-testid^="chat-message-assistant-"]')
+    .count();
+  const toolCardCountBefore = await messageList
+    .locator('[data-testid^="tool-call-card-"]')
+    .count();
+
   const input = page.getByTestId("chat-input");
   await input.fill(message);
   await page.getByTestId("chat-send-btn").click();
-  // Wait for the loading spinner to appear then disappear (response complete).
-  await expect(page.getByTestId("chat-loading")).toBeVisible({ timeout: 5000 });
-  await expect(page.getByTestId("chat-loading")).not.toBeVisible({
-    timeout: 15000,
-  });
+
+  // The mock client may resolve before the loading spinner renders, so
+  // don't assert spinner visibility.  Instead wait for either a new
+  // assistant bubble or new tool-call cards (covers text-only,
+  // tool-call-only, and mixed responses).
+  await expect(async () => {
+    const assistantCount = await messageList
+      .locator('[data-testid^="chat-message-assistant-"]')
+      .count();
+    const toolCardCount = await messageList
+      .locator('[data-testid^="tool-call-card-"]')
+      .count();
+    expect(
+      assistantCount > assistantCountBefore ||
+        toolCardCount > toolCardCountBefore
+    ).toBe(true);
+  }).toPass({ timeout: 15000 });
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────────

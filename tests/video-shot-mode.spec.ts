@@ -155,8 +155,10 @@ test.describe("US-055: Shot mode, video generation, and take management", () => 
     const scriptPanel = page.getByTestId("script-panel");
     await expect(scriptPanel).toBeVisible();
 
-    // ── Step 1: Navigate directly to shot 1; assert header "SHOT 1 OF 3" ─────
-    await page.goto(`/video/scripts/${scriptId}/${shot1Id}`);
+    // ── Step 1: Click "→ Shot view" on shot 1 to enter shot mode; assert header "SHOT 1 OF 3"
+    const shotViewLink = page.getByTestId(`shot-view-link-${shot1Id}`);
+    await expect(shotViewLink).toBeVisible();
+    await shotViewLink.click();
 
     // Header should read "Shot 1 of 3" (case-insensitive partial match)
     const shotModeHeader = page.getByTestId("shot-mode-header");

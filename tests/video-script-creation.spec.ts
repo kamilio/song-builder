@@ -37,7 +37,7 @@ test.describe("US-053: Script creation and editor navigation", () => {
     // Start from a clean slate so tests are fully isolated.
     await page.goto("/");
     await page.evaluate(() => localStorage.clear());
-    // Seed a POE API key so the ApiKeyGuard allows generation to proceed.
+    // Seed a Poe API key so the ApiKeyGuard allows generation to proceed.
     // The mock LLM (VITE_USE_MOCK_LLM=true) does not make real API calls;
     // the key just needs to be non-empty to pass the guard check.
     await page.evaluate(() => {
