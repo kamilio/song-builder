@@ -1,23 +1,29 @@
 /**
  * ModelMultiSelect — a shadcn-compatible multi-select dropdown (US-028).
  *
- * Renders a button that opens a dropdown listing all available image models.
+ * Renders a button that opens a dropdown listing all available models.
  * The user can toggle individual models on/off. At least one model must
  * always be selected — deselecting the last model is a no-op.
  *
  * Design follows shadcn/ui patterns: plain Tailwind classes, keyboard
  * accessible (Escape closes), click-outside closes.
+ *
+ * Generic over any model type that has at least { id, label }.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import type { ImageModelDef } from "@/image/lib/imageModels";
 
-interface ModelMultiSelectProps {
-  models: ImageModelDef[];
-  selected: ImageModelDef[];
-  onChange: (selected: ImageModelDef[]) => void;
+export interface ModelOption {
+  id: string;
+  label: string;
+}
+
+interface ModelMultiSelectProps<T extends ModelOption = ModelOption> {
+  models: T[];
+  selected: T[];
+  onChange: (selected: T[]) => void;
   className?: string;
 }
 
@@ -27,13 +33,13 @@ interface ModelMultiSelectProps {
  * - 1 selected: the model label
  * - 2+ selected: "N models"
  */
-function triggerLabel(selected: ImageModelDef[]): string {
+function triggerLabel(selected: ModelOption[]): string {
   if (selected.length === 0) return "Select models…";
   if (selected.length === 1) return selected[0].label;
   return `${selected.length} models`;
 }
 
-export function ModelMultiSelect({ models, selected, onChange, className }: ModelMultiSelectProps) {
+export function ModelMultiSelect<T extends ModelOption>({ models, selected, onChange, className }: ModelMultiSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -61,7 +67,7 @@ export function ModelMultiSelect({ models, selected, onChange, className }: Mode
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
-  const toggleModel = useCallback((model: ImageModelDef) => {
+  const toggleModel = useCallback((model: T) => {
     const isSelected = selected.some((m) => m.id === model.id);
     if (isSelected) {
       // Never deselect the last model
@@ -85,7 +91,7 @@ export function ModelMultiSelect({ models, selected, onChange, className }: Mode
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Select image models"
+        aria-label="Select models"
         data-testid="model-multi-select-trigger"
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
@@ -99,7 +105,7 @@ export function ModelMultiSelect({ models, selected, onChange, className }: Mode
         <div
           role="listbox"
           aria-multiselectable="true"
-          aria-label="Image models"
+          aria-label="Models"
           data-testid="model-multi-select-dropdown"
           className="absolute bottom-full mb-1 left-0 z-50 min-w-[160px] rounded-md border bg-popover shadow-md"
         >
