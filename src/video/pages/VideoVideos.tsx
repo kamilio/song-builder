@@ -11,7 +11,8 @@
  */
 
 import { useState, useMemo } from "react";
-import { Clock, Film, Pin, Download, Trash2, Check } from "lucide-react";
+import { Clock, Film, Pin, PinOff, Download, Trash2, Check } from "lucide-react";
+import { VideoPlayer } from "@/video/components/VideoPlayer";
 import { ConfirmDialog } from "@/shared/components/ConfirmDialog";
 import { videoStorageService } from "@/video/lib/storage/storageService";
 import type { Script, Shot, VideoHistoryEntry } from "@/video/lib/storage/types";
@@ -100,46 +101,31 @@ function VideoCard({ flat, onPin, onDownload, onDeleteRequest }: VideoCardProps)
       data-testid={`video-card-${encodeURIComponent(entry.url).slice(0, 40)}`}
     >
       {/* Thumbnail */}
-      <div className="relative w-full aspect-video bg-black overflow-hidden group">
-        <video
-          src={entry.url}
-          muted
-          preload="metadata"
-          className="w-full h-full object-cover"
-          aria-label={`${versionLabel} from ${script.title}`}
-          onMouseEnter={(e) => {
-            const video = e.currentTarget;
-            video.play().catch(() => {
-              // autoplay may be blocked — ignore silently
-            });
-          }}
-          onMouseLeave={(e) => {
-            const video = e.currentTarget;
-            video.pause();
-            video.currentTime = 0;
-          }}
-        />
-
-        {/* Pin overlay */}
-        {entry.pinned && (
-          <div
-            className="absolute top-1.5 left-1.5 bg-amber-400/90 rounded-full p-1"
-            aria-label="Pinned"
-          >
-            <Pin className="h-2.5 w-2.5 text-white fill-white" />
-          </div>
-        )}
-
-        {/* Selected checkmark overlay */}
-        {isSelected && (
-          <div
-            className="absolute top-1.5 right-1.5 bg-green-500/90 rounded-full p-1"
-            aria-label="Selected take"
-          >
-            <Check className="h-2.5 w-2.5 text-white" />
-          </div>
-        )}
-      </div>
+      <VideoPlayer
+        src={entry.url}
+        testIdPrefix={`video-card-${encodeURIComponent(entry.url).slice(0, 40)}`}
+        ariaLabel={`${versionLabel} from ${script.title}`}
+        overlays={
+          <>
+            {entry.pinned && (
+              <div
+                className="absolute top-1.5 left-1.5 bg-amber-400/90 rounded-full p-1"
+                aria-label="Pinned"
+              >
+                <Pin className="h-2.5 w-2.5 text-white fill-white" />
+              </div>
+            )}
+            {isSelected && (
+              <div
+                className="absolute top-1.5 right-1.5 bg-green-500/90 rounded-full p-1"
+                aria-label="Selected take"
+              >
+                <Check className="h-2.5 w-2.5 text-white" />
+              </div>
+            )}
+          </>
+        }
+      />
 
       {/* Card body */}
       <div className="p-2.5 flex flex-col gap-1.5 flex-1">
@@ -182,7 +168,7 @@ function VideoCard({ flat, onPin, onDownload, onDeleteRequest }: VideoCardProps)
             aria-label={entry.pinned ? "Unpin video" : "Pin video"}
             aria-pressed={entry.pinned}
           >
-            📌
+            {entry.pinned ? <PinOff className="h-3 w-3" aria-hidden="true" /> : <Pin className="h-3 w-3" aria-hidden="true" />}
           </button>
 
           {/* Download */}
